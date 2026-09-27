@@ -1,0 +1,450 @@
+/* Température Critique : la coquille 8 bits.
+   Les 16 couleurs reprennent src/data/palette.js ; tools/build.js vérifie
+   qu'elles y sont identiques et qu'aucune autre couleur n'apparaît.
+   Les @font-face (VT323, Pixelify Sans) sont ajoutés par le build.
+   Aucun arrondi, bordures de 2 px, ombres pixel de 4 px.
+   Écran de référence : 360 × 780 px CSS (S25 FE). */
+
+:root {
+  --fond: #0b0f1a;
+  --surface: #141a2b;
+  --surface-2: #1f2740;
+  --trait: #2a3350;
+  --trait-fort: #4a5572;
+  --texte-2: #9aa3b8;
+  --texte-doux: #c9ccd6;
+  --texte: #e8e6d9;
+  --cyan: #5fd3f3;
+  --cyan-graphe: #1d93b8;
+  --cyan-fond: #0f2230;
+  --orange: #ff9d3b;
+  --orange-graphe: #d9701a;
+  --orange-fond: #22170c;
+  --orange-ombre: #7a3f0a;
+  --texte-sur-orange: #d8c9b4;
+
+  --police-texte: "VT323", ui-monospace, monospace;
+  --police-titre: "Pixelify Sans", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  background: var(--fond);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fond);
+  color: var(--texte);
+  font-family: var(--police-texte);
+  font-size: 22px;
+  line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.panneau-ouvert {
+  overflow: hidden;
+}
+
+p {
+  margin: 0;
+}
+
+/* --- L'écran principal ------------------------------------------------ */
+
+.coquille {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 0 16px env(safe-area-inset-bottom);
+}
+
+.entete {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.principal {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 52px; /* la hauteur de l'en-tête : l'énergie reste centrée */
+}
+
+/* Doit tenir « 1,00e400 J » sur 360 px (vérifié par npm run voir). */
+.energie {
+  font-family: var(--police-texte);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--orange);
+  white-space: nowrap;
+}
+
+.bandeaux {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bandeau {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.bandeau button {
+  flex: none;
+}
+
+/* --- Boutons ------------------------------------------------------------ */
+
+button {
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0 4px 4px 0; /* la place de l'ombre */
+  padding: 8px 12px;
+  border: 2px solid var(--trait);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: 4px 4px 0 var(--trait);
+  color: var(--texte);
+  font-family: var(--police-titre);
+  font-size: 16px;
+  line-height: 1.1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+pre:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  border-color: var(--trait-fort);
+  box-shadow: none;
+  color: var(--texte-2);
+  cursor: default;
+}
+
+.bouton-principal {
+  border-color: var(--orange);
+  background: var(--orange);
+  box-shadow: 4px 4px 0 var(--orange-ombre);
+  color: var(--fond);
+}
+
+button[aria-pressed="true"] {
+  border-color: var(--cyan);
+  background: var(--cyan);
+  box-shadow: 4px 4px 0 var(--cyan-graphe);
+  color: var(--fond);
+}
+
+/* ≡ dessiné en trois barres : le glyphe U+2261 n'est dans aucune police. */
+.bouton-icone {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.icone-menu,
+.icone-menu::before,
+.icone-menu::after {
+  display: block;
+  width: 20px;
+  height: 4px;
+  background: var(--texte);
+}
+
+.icone-menu {
+  position: relative;
+}
+
+.icone-menu::before,
+.icone-menu::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.icone-menu::before {
+  top: -7px;
+}
+
+.icone-menu::after {
+  top: 7px;
+}
+
+/* --- Le panneau Options ------------------------------------------------- */
+
+.panneau {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--fond);
+}
+
+.panneau-contenu {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.panneau-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 700;
+}
+
+h1 {
+  font-size: 24px;
+}
+
+h2 {
+  margin-bottom: 4px;
+  font-size: 18px;
+  color: var(--cyan);
+}
+
+h3 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  color: var(--texte-2);
+}
+
+.ligne-version {
+  display: block;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--texte-2);
+  font-family: var(--police-texte);
+  font-size: 20px;
+  text-align: left;
+}
+
+.ligne-version:active {
+  transform: none;
+}
+
+.carte {
+  margin: 16px 0;
+  padding: 12px;
+  border: 2px solid var(--trait);
+  background: var(--surface);
+}
+
+.carte > :first-child {
+  margin-top: 0;
+}
+
+.encart {
+  padding: 8px 12px;
+  border: 2px solid var(--trait);
+}
+
+.encart-orange {
+  border-color: var(--orange);
+  background: var(--orange-fond);
+  color: var(--texte-sur-orange);
+}
+
+.encart-cyan {
+  border-color: var(--cyan);
+  background: var(--cyan-fond);
+  color: var(--texte);
+}
+
+#partie-de-test {
+  margin-top: 8px;
+  font-family: var(--police-titre);
+  font-size: 16px;
+}
+
+/* --- Champs ------------------------------------------------------------- */
+
+label {
+  display: block;
+  margin: 12px 0 4px;
+  color: var(--texte-2);
+  font-size: 20px;
+}
+
+input,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border: 2px solid var(--trait);
+  border-radius: 0;
+  background: var(--fond);
+  color: var(--texte);
+  font-family: var(--police-texte);
+  font-size: 20px;
+}
+
+textarea {
+  display: block;
+  resize: vertical;
+  word-break: break-all;
+}
+
+.champ-ligne {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.champ-ligne input {
+  flex: 1;
+  min-width: 0;
+}
+
+.champ-ligne button {
+  flex: none;
+}
+
+.message {
+  min-height: 1.2em;
+  margin-top: 4px;
+  color: var(--texte-doux);
+  font-size: 20px;
+}
+
+.message:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+.message.erreur {
+  color: var(--orange);
+}
+
+/* --- Le mode test ------------------------------------------------------- */
+
+.rangee {
+  display: grid;
+  gap: 8px;
+}
+
+.rangee button {
+  margin: 0;
+  padding: 8px 4px;
+}
+
+.rangee-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.rangee-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mesures {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 20px;
+}
+
+.mesures dt {
+  color: var(--texte-2);
+}
+
+.mesures dd {
+  margin: 0;
+  text-align: right;
+}
+
+.phrase-temoin {
+  display: grid;
+  gap: 8px;
+}
+
+.temoin {
+  overflow-wrap: anywhere;
+}
+
+.temoin-vt323 {
+  font-family: var(--police-texte);
+  font-size: 26px;
+}
+
+.temoin-pixelify {
+  font-family: var(--police-titre);
+  font-size: 20px;
+}
+
+.etiquette {
+  display: block;
+  color: var(--texte-2);
+  font-family: var(--police-texte);
+  font-size: 18px;
+}
+
+/* --- Licences ----------------------------------------------------------- */
+
+.licences {
+  max-height: 60vh;
+  margin: 12px 0 0;
+  padding: 8px;
+  overflow-y: auto;
+  border: 2px solid var(--trait);
+  background: var(--fond);
+  color: var(--texte-doux);
+  font-family: var(--police-texte);
+  font-size: 18px;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sans-script {
+  padding: 16px;
+}

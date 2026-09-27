@@ -1,0 +1,187 @@
+import { Decimal } from "./nombre.js";
+
+// Version du schéma de l'état, déclarée ici et nulle part ailleurs. Elle ne
+// bouge que si le schéma change, et une entrée de `migrations` l'accompagne.
+export const SAVE_VERSION = 1;
+
+// migrations[v] transforme une enveloppe de version v en version v + 1.
+// Vide dans ce lot : le premier lot qui change le schéma y ajoute une entrée.
+export const migrations = [];
+
+const PREFIXE_CODE = "TC1.";
+
+// Un Decimal s'écrit {"$d":"<mantisse>e<exposant>"}. Ce format relit
+// exactement la même valeur, alors que toString() passe par un Number sous
+// 1e21 et arrondit (mesuré : 24 écarts sur 240 valeurs).
+const FORMAT_DECIMAL = /^-?\d+(?:\.\d+)?e-?\d{1,16}$/;
+
+// Texte JSON de n'importe quelle valeur. Tout Decimal, où qu'il soit dans
+// l'arbre, devient {"$d": …} : un champ ajouté par un lot futur est couvert
+// sans rien écrire ici.
+export function serialiser(valeur) {
+  return JSON.stringify(valeur, function (cle, v) {
+    // JSON.stringify a déjà appelé Decimal#toJSON : `v` est la chaîne
+    // "1e+400". L'objet d'origine se lit sur this[cle].
+    const brut = this[cle];
+    if (brut instanceof Decimal) {
+      const texte = `${brut.mantissa}e${brut.exponent}`;
+      // On n'écrit que ce qu'on sait relire : un NaN ne remplace jamais une
+      // bonne sauvegarde.
+      if (!FORMAT_DECIMAL.test(texte)) throw new Error(`nombre invalide, non sauvegardé (${texte})`);
+      return { $d: texte };
+    }
+    // Un objet d'état dont la seule clé serait $d se relirait comme un nombre.
+    if (estObjet(brut) && Object.keys(brut).length === 1 && "$d" in brut) {
+      throw new Error("la clé « $d » est réservée aux nombres Decimal");
+    }
+    return v;
+  });
+}
+
+// L'inverse de `serialiser` : tout objet qui a exactement la clé $d
+// redevient un Decimal. Lève une erreur sur un JSON ou un nombre illisible.
+export function deserialiser(texte) {
+  return JSON.parse(texte, (cle, v) => {
+    if (estObjet(v)) {
+      const cles = Object.keys(v);
+      if (cles.length === 1 && cles[0] === "$d") {
+        if (typeof v.$d !== "string" || !FORMAT_DECIMAL.test(v.$d)) {
+          throw new Error(`nombre illisible (${JSON.stringify(v.$d)})`);
+        }
+        return new Decimal(v.$d);
+      }
+    }
+    return v;
+  });
+}
+
+// Ce qui s'écrit dans le stockage et dans un code d'export.
+// `sauveLe` : l'heure (ms) jusqu'à laquelle l'état a été simulé.
+export function envelopper(etat, { build, sauveLe }) {
+  return { saveVersion: SAVE_VERSION, build, sauveLe, etat };
+}
+
+// Relit le texte JSON d'une enveloppe, venu du stockage ou d'un code.
+// Rend { ok: true, enveloppe } ou { ok: false, cause, message } avec
+// cause = "illisible" ou "future". Ne lève jamais.
+export function relire(texte) {
+  let brut;
+  try {
+    brut = JSON.parse(texte);
+  } catch {
+    return refus("illisible", "le texte n'est pas du JSON");
+  }
+  // La version se lit avant tout le reste : une sauvegarde plus récente peut
+  // avoir un format que ce build ne comprend pas.
+  const version = estObjet(brut) ? brut.saveVersion : undefined;
+  if (!Number.isSafeInteger(version) || version < 1) {
+    return refus("illisible", "la version de sauvegarde manque ou est invalide");
+  }
+  if (version > SAVE_VERSION) {
+    return refus("future", `c'est une sauvegarde de version ${version}, venue d'une version `
+      + `plus récente du jeu ; celle-ci lit jusqu'à la version ${SAVE_VERSION}`);
+  }
+  let enveloppe;
+  try {
+    enveloppe = migrer(deserialiser(texte));
+  } catch (e) {
+    return refus("illisible", e.message);
+  }
+  const defaut = defautDeForme(enveloppe);
+  return defaut ? refus("illisible", defaut) : { ok: true, enveloppe };
+}
+
+// "TC1." + base64url(UTF-8(JSON de l'enveloppe)).
+export function exporter(enveloppe) {
+  return PREFIXE_CODE + versBase64url(new TextEncoder().encode(serialiser(enveloppe)));
+}
+
+// Rend { ok: true, enveloppe } ou { ok: false, erreur } : un message qui dit
+// pourquoi le code est refusé. Ne lève jamais.
+export function importer(code) {
+  if (typeof code !== "string") return { ok: false, erreur: "le code n'est pas un texte" };
+  // Un copier-coller peut ajouter des espaces ou des retours à la ligne.
+  const net = code.replace(/\s+/g, "");
+  if (net === "") return { ok: false, erreur: "le code est vide" };
+  if (!net.startsWith(PREFIXE_CODE)) {
+    return { ok: false, erreur: `le code doit commencer par « ${PREFIXE_CODE} »` };
+  }
+  let texte;
+  try {
+    const octets = depuisBase64url(net.slice(PREFIXE_CODE.length));
+    texte = new TextDecoder("utf-8", { fatal: true }).decode(octets);
+  } catch {
+    return { ok: false, erreur: "le code est abîmé : il ne se décode pas" };
+  }
+  const lu = relire(texte);
+  return lu.ok ? { ok: true, enveloppe: lu.enveloppe } : { ok: false, erreur: lu.message };
+}
+
+function migrer(enveloppe) {
+  let env = enveloppe;
+  for (let v = env.saveVersion; v < SAVE_VERSION; v++) {
+    const migration = migrations[v];
+    if (typeof migration !== "function") throw new Error(`la migration ${v} → ${v + 1} manque`);
+    env = migration(env);
+    env.saveVersion = v + 1;
+  }
+  return env;
+}
+
+// La forme minimale qu'une enveloppe doit avoir pour remplacer une partie.
+function defautDeForme(enveloppe) {
+  const { sauveLe, etat } = enveloppe;
+  if (!Number.isSafeInteger(sauveLe) || sauveLe < 0) return "la date de sauvegarde manque ou est invalide";
+  if (!estObjet(etat)) return "l'état de la partie manque";
+  if (!estObjet(etat.meta)) return "l'état est incomplet : « meta » manque";
+  if (!estObjet(etat.temps) || !Number.isSafeInteger(etat.temps.totalMs) || etat.temps.totalMs < 0) {
+    return "l'état est incomplet : « temps » manque ou est invalide";
+  }
+  if (!(etat.energie instanceof Decimal)) return "l'état est incomplet : « energie » manque ou n'est pas un nombre";
+  return null;
+}
+
+function refus(cause, message) {
+  return { ok: false, cause, message };
+}
+
+function estObjet(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+// base64url (RFC 4648 §5), sans remplissage.
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function versBase64url(octets) {
+  let s = "";
+  let i = 0;
+  for (; i + 2 < octets.length; i += 3) {
+    const n = (octets[i] << 16) | (octets[i + 1] << 8) | octets[i + 2];
+    s += ALPHABET[n >> 18] + ALPHABET[(n >> 12) & 63] + ALPHABET[(n >> 6) & 63] + ALPHABET[n & 63];
+  }
+  if (octets.length - i === 1) {
+    const n = octets[i] << 16;
+    s += ALPHABET[n >> 18] + ALPHABET[(n >> 12) & 63];
+  } else if (octets.length - i === 2) {
+    const n = (octets[i] << 16) | (octets[i + 1] << 8);
+    s += ALPHABET[n >> 18] + ALPHABET[(n >> 12) & 63] + ALPHABET[(n >> 6) & 63];
+  }
+  return s;
+}
+
+function depuisBase64url(texte) {
+  if (!/^[A-Za-z0-9_-]*$/.test(texte) || texte.length % 4 === 1) throw new Error("base64url invalide");
+  const octets = new Uint8Array(Math.floor((texte.length * 3) / 4));
+  let o = 0;
+  let tampon = 0;
+  let bits = 0;
+  for (const c of texte) {
+    tampon = ((tampon << 6) | ALPHABET.indexOf(c)) & 0xffff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      octets[o++] = (tampon >> bits) & 0xff;
+    }
+  }
+  return octets;
+}
