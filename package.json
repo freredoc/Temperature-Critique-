@@ -1,0 +1,29 @@
+{
+  "name": "temperature-critique",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Température Critique : jeu incrémental de physique, du labo de cryogénie jusqu'au cosmos.",
+  "type": "module",
+  "config": {
+    "build": 1
+  },
+  "scripts": {
+    "build": "node tools/build.js",
+    "test": "node --test \"test/*.test.js\"",
+    "check": "node tools/garde-sim.js && npm test && npm run build",
+    "voir": "node tools/voir.js"
+  },
+  "dependencies": {
+    "@antimatter-dimensions/notations": "3.2.0",
+    "@fontsource/pixelify-sans": "5.3.0",
+    "@fontsource/vt323": "5.3.0",
+    "break_infinity.js": "2.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

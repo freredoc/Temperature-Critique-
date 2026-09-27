@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f1a">
+<title>Température Critique</title>
+<link rel="icon" href="data:,">
+<style>
+@@STYLE@@
+</style>
+</head>
+<body>
+<div class="coquille" id="coquille">
+  <header class="entete">
+    <button type="button" id="ouvrir-options" class="bouton-icone" aria-label="Options" aria-haspopup="dialog" aria-controls="options" aria-expanded="false"><span class="icone-menu" aria-hidden="true"></span></button>
+  </header>
+  <div id="bandeaux" class="bandeaux"></div>
+  <main class="principal">
+    <p class="energie" data-devoile="energie" hidden><span id="valeur-energie"></span>&nbsp;J</p>
+  </main>
+</div>
+
+<div id="options" class="panneau" role="dialog" aria-modal="true" aria-labelledby="titre-options" hidden>
+  <div class="panneau-contenu">
+    <div class="panneau-entete">
+      <h1 id="titre-options">Options</h1>
+      <button type="button" id="fermer-options">Fermer</button>
+    </div>
+
+    <button type="button" id="ligne-version" class="ligne-version"></button>
+    <p id="partie-de-test" class="encart encart-orange" hidden>Partie de test</p>
+
+    <section id="mode-test" class="carte" aria-labelledby="titre-mode-test" hidden>
+      <h2 id="titre-mode-test">Mode test</h2>
+
+      <h3 id="titre-vitesse">Vitesse</h3>
+      <div class="rangee rangee-4" role="group" aria-labelledby="titre-vitesse">
+        <button type="button" data-vitesse="1" aria-pressed="true">×1</button>
+        <button type="button" data-vitesse="10" aria-pressed="false">×10</button>
+        <button type="button" data-vitesse="100" aria-pressed="false">×100</button>
+        <button type="button" data-vitesse="1000" aria-pressed="false">×1000</button>
+      </div>
+
+      <h3 id="titre-sauter">Sauter</h3>
+      <div class="rangee rangee-3" role="group" aria-labelledby="titre-sauter">
+        <button type="button" data-saut="60000">+1 min</button>
+        <button type="button" data-saut="3600000">+1 h</button>
+        <button type="button" data-saut="86400000">+1 jour</button>
+      </div>
+
+      <form id="form-energie" class="formulaire">
+        <label for="champ-energie">Énergie (J)</label>
+        <div class="champ-ligne">
+          <input id="champ-energie" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="1e400">
+          <button type="submit">Appliquer</button>
+        </div>
+      </form>
+      <p id="message-energie" class="message" role="status"></p>
+
+      <h3>Mesures</h3>
+      <dl class="mesures">
+        <dt>Temps de partie</dt><dd id="mesure-temps"></dd>
+        <dt>Dernier rattrapage</dt><dd id="mesure-rattrapage"></dd>
+        <dt>SAVE_VERSION</dt><dd id="mesure-save-version"></dd>
+        <dt>Taille de la sauvegarde</dt><dd id="mesure-taille"></dd>
+      </dl>
+
+      <h3>Phrase témoin</h3>
+      <div id="phrase-temoin" class="phrase-temoin">
+        <p class="temoin temoin-vt323"><span class="etiquette">VT323</span>éèêàçôœ ²³ × − · … « » Ω τ γ λ α Δ √ ≥ → ☉ ₂</p>
+        <p class="temoin temoin-pixelify"><span class="etiquette">Pixelify Sans</span>éèêàçôœ ²³ × − · … « » Ω τ γ λ α Δ √ ≥ → ☉ ₂</p>
+      </div>
+
+      <h3>Nouvelle partie</h3>
+      <button type="button" id="nouvelle-partie">Nouvelle partie</button>
+      <p id="message-nouvelle-partie" class="message" role="status"></p>
+    </section>
+
+    <section class="carte">
+      <button type="button" id="sauvegarder" class="bouton-principal">Sauvegarder maintenant</button>
+      <p id="message-sauvegarde" class="message" role="status"></p>
+    </section>
+
+    <section class="carte">
+      <button type="button" id="exporter">Exporter</button>
+      <label for="code-export">Code à copier</label>
+      <textarea id="code-export" rows="3" readonly spellcheck="false"></textarea>
+      <button type="button" id="copier-export">Copier</button>
+      <p id="message-export" class="message" role="status"></p>
+    </section>
+
+    <section class="carte">
+      <label for="code-import">Colle ici un code « TC1. »</label>
+      <textarea id="code-import" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      <button type="button" id="importer">Importer</button>
+      <p id="message-import" class="message" role="status"></p>
+    </section>
+
+    <section class="carte">
+      <button type="button" id="afficher-licences" aria-expanded="false" aria-controls="licences">Licences</button>
+      <pre id="licences" class="licences" tabindex="0" hidden></pre>
+    </section>
+  </div>
+</div>
+
+<noscript><p class="sans-script">Température Critique a besoin de JavaScript.</p></noscript>
+<script type="application/json" id="licences-tierces">@@LICENCES@@</script>
+<script>
+@@SCRIPT@@
+</script>
+</body>
+</html>

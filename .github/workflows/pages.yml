@@ -1,0 +1,52 @@
+# Publie le jeu sur GitHub Pages à chaque fusion dans main, ou à la main.
+# Adresse : https://freredoc.github.io/Temperature-Critique-/
+# Réglage requis une fois dans le dépôt : Settings → Pages → Build and
+# deployment → Source : « GitHub Actions ».
+# Versions majeures des actions vérifiées le 27/09/2026 sur leurs pages de
+# releases : checkout v7.0.1, setup-node v7.0.0, upload-pages-artifact v5.0.0,
+# deploy-pages v5.0.1.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un seul déploiement à la fois ; celui qui a commencé va au bout.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # garde-sim, les tests, puis le build de dist/index.html.
+      # Playwright (npm run voir) ne tourne pas ici : trop lourd.
+      - run: npm run check
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deployer:
+    needs: construire
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v5
