@@ -1,12 +1,28 @@
 import { Decimal } from "./nombre.js";
+import { MACHINES } from "../data/machines.js";
 
 // Version du schéma de l'état, déclarée ici et nulle part ailleurs. Elle ne
 // bouge que si le schéma change, et une entrée de `migrations` l'accompagne.
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 // migrations[v] transforme une enveloppe de version v en version v + 1.
-// Vide dans ce lot : le premier lot qui change le schéma y ajoute une entrée.
+// Une migration décrit la forme de SON époque, en toutes lettres : elle ne lit
+// jamais une table de src/data, qui peut changer après elle.
 export const migrations = [];
+
+// 1 → 2 (lot MACHINES) : les huit machines, la plus haute découverte et le
+// mode d'achat. Une partie v1 n'avait aucune machine : tout part de zéro, et
+// rien d'autre ne bouge — ni l'énergie, ni le temps, ni le mode test.
+migrations[1] = (env) => {
+  if (estObjet(env.etat)) {
+    env.etat.machines = Array.from({ length: 8 }, () => ({ quantite: new Decimal(0), achetees: 0 }));
+    env.etat.decouvertes = { machines: 0 };
+    env.etat.preferences = { modeAchat: "un" };
+  }
+  return env;
+};
+
+const MODES_ACHAT = ["un", "lot"];
 
 const PREFIXE_CODE = "TC1.";
 
@@ -62,8 +78,10 @@ export function envelopper(etat, { build, sauveLe }) {
 }
 
 // Relit le texte JSON d'une enveloppe, venu du stockage ou d'un code.
-// Rend { ok: true, enveloppe } ou { ok: false, cause, message } avec
-// cause = "illisible" ou "future". Ne lève jamais.
+// Rend { ok: true, enveloppe, migreeDepuis } ou { ok: false, cause, message }
+// avec cause = "illisible" ou "future". `migreeDepuis` est la version lue si
+// elle était plus ancienne que SAVE_VERSION, null sinon : c'est ce qui dit au
+// chargement qu'il faut mettre le texte d'origine de côté. Ne lève jamais.
 export function relire(texte) {
   let brut;
   try {
@@ -88,7 +106,8 @@ export function relire(texte) {
     return refus("illisible", e.message);
   }
   const defaut = defautDeForme(enveloppe);
-  return defaut ? refus("illisible", defaut) : { ok: true, enveloppe };
+  if (defaut) return refus("illisible", defaut);
+  return { ok: true, enveloppe, migreeDepuis: version < SAVE_VERSION ? version : null };
 }
 
 // "TC1." + base64url(UTF-8(JSON de l'enveloppe)).
@@ -138,7 +157,33 @@ function defautDeForme(enveloppe) {
     return "l'état est incomplet : « temps » manque ou est invalide";
   }
   if (!(etat.energie instanceof Decimal)) return "l'état est incomplet : « energie » manque ou n'est pas un nombre";
+  const machines = etat.machines;
+  if (!Array.isArray(machines) || machines.length !== MACHINES.length) {
+    return `l'état est incomplet : « machines » manque ou n'a pas ${MACHINES.length} entrées`;
+  }
+  for (let i = 0; i < machines.length; i++) {
+    const m = machines[i];
+    if (!estObjet(m)) return `l'état est incomplet : « machines[${i}] » manque`;
+    if (!(m.quantite instanceof Decimal) || !estFini(m.quantite) || m.quantite.lt(0)) {
+      return `l'état est incomplet : « machines[${i}].quantite » manque ou n'est pas un nombre positif`;
+    }
+    if (!Number.isSafeInteger(m.achetees) || m.achetees < 0) {
+      return `l'état est incomplet : « machines[${i}].achetees » manque ou n'est pas un entier positif`;
+    }
+  }
+  const decouvertes = estObjet(etat.decouvertes) ? etat.decouvertes.machines : undefined;
+  if (!Number.isInteger(decouvertes) || decouvertes < 0 || decouvertes > MACHINES.length) {
+    return `l'état est incomplet : « decouvertes.machines » manque ou n'est pas entre 0 et ${MACHINES.length}`;
+  }
+  const mode = estObjet(etat.preferences) ? etat.preferences.modeAchat : undefined;
+  if (!MODES_ACHAT.includes(mode)) {
+    return "l'état est incomplet : « preferences.modeAchat » manque ou n'est pas « un » ou « lot »";
+  }
   return null;
+}
+
+function estFini(d) {
+  return Number.isFinite(d.mantissa) && Number.isFinite(d.exponent);
 }
 
 function refus(cause, message) {

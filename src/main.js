@@ -5,9 +5,10 @@ import { rattraper } from "./sim/rattrapage.js";
 import { envelopper, relire, serialiser } from "./sim/sauvegarde.js";
 import { monterEcran } from "./ui/ecran.js";
 import { formaterDuree } from "./ui/format.js";
+import { monterMachines } from "./ui/machines.js";
 import { monterModeTest } from "./ui/mode-test.js";
 import { monterOptions } from "./ui/options.js";
-import { ecrireSauvegarde, lireSauvegarde, mettreDeCote } from "./ui/stockage.js";
+import { copierAvantMigration, ecrireSauvegarde, lireSauvegarde, mettreDeCote } from "./ui/stockage.js";
 
 // Le temps réel entre dans la simulation par deux chemins exclusifs :
 // - page visible : la boucle d'images (horodatages requestAnimationFrame) ;
@@ -85,6 +86,17 @@ function charger() {
 
   const r = relire(lu.texte);
   if (r.ok) {
+    // Une sauvegarde d'une version antérieure est copiée telle quelle AVANT
+    // la première écriture. Si la copie échoue, on joue sans rien écrire :
+    // l'ancienne reste intacte, et rien ne l'écrase.
+    if (r.migreeDepuis !== null) {
+      const copie = copierAvantMigration(lu.texte, r.migreeDepuis, new Date(maintenant).toISOString());
+      if (!copie.ok) {
+        ecritureBloquee = "la sauvegarde d'avant la mise à jour n'a pas pu être copiée";
+        ecran.bandeau(`Ta sauvegarde vient d'une version précédente, et ${copie.erreur}. `
+          + "Elle reste intacte ; rien n'est sauvegardé tant que la copie n'est pas possible.", "orange");
+      }
+    }
     constaterAbsence(r.enveloppe.etat, maintenant - r.enveloppe.sauveLe);
     return r.enveloppe.etat;
   }
@@ -133,7 +145,9 @@ function image(maintenant) {
 }
 
 function rendre() {
+  // Le dévoilement d'abord : les cartes cachées ne se calculent pas.
   ecran.rendre(jeu.etat);
+  machines.rendre(jeu.etat);
   if (options.ouvert()) {
     options.rafraichir();
     modeTest.rafraichir();
@@ -163,6 +177,9 @@ function reprendre() {
   rendre();
 }
 
+// Les cartes naissent avant que monterEcran ne confronte le dévoilement à la
+// page : il exige un élément par entrée de DEVOILEMENT.
+const machines = monterMachines(jeu, { apresAchat: rendre });
 const ecran = monterEcran();
 jeu.etat = charger();
 if (document.visibilityState === "hidden") cacheLe = Date.now();

@@ -17,7 +17,17 @@
   </header>
   <div id="bandeaux" class="bandeaux"></div>
   <main class="principal">
-    <p class="energie" data-devoile="energie" hidden><span id="valeur-energie"></span>&nbsp;J</p>
+    <div class="tete">
+      <p class="energie" data-devoile="energie" hidden><span id="valeur-energie"></span>&nbsp;J</p>
+      <p id="production" class="production" data-devoile="production" hidden></p>
+    </div>
+    <p id="aide-debut" class="aide" data-devoile="aide-debut" hidden></p>
+    <div id="commandes-achat" class="commandes" data-devoile="commandes-achat" role="group" aria-label="Mode d'achat" hidden>
+      <button type="button" data-mode-achat="un" aria-pressed="true">×1</button>
+      <button type="button" data-mode-achat="lot" aria-pressed="false">Jusqu'à 10</button>
+      <button type="button" id="tout-acheter" class="tout-acheter">Tout acheter</button>
+    </div>
+    <div id="machines" class="machines"></div>
   </main>
 </div>
 

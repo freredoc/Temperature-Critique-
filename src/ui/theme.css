@@ -83,9 +83,18 @@ p {
 .principal {
   display: flex;
   flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding-bottom: 52px; /* la hauteur de l'en-tête : l'énergie reste centrée */
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+/* L'énergie reste en haut pendant que les cartes défilent dessous. */
+.tete {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 0;
+  background: var(--fond);
 }
 
 /* Doit tenir « 1,00e400 J » sur 360 px (vérifié par npm run voir). */
@@ -94,6 +103,94 @@ p {
   font-size: 56px;
   line-height: 1;
   color: var(--orange);
+  white-space: nowrap;
+}
+
+.production {
+  color: var(--texte-2);
+  font-size: 22px;
+}
+
+.aide {
+  color: var(--texte-doux);
+}
+
+/* --- Les machines ------------------------------------------------------- */
+
+.commandes {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+}
+
+.commandes button {
+  margin: 0 4px 4px 0;
+}
+
+.tout-acheter {
+  text-transform: uppercase;
+}
+
+.machines {
+  display: grid;
+  gap: 12px;
+}
+
+.machine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 2px solid var(--trait);
+  background: var(--surface);
+}
+
+.machine.presque {
+  border-color: var(--orange);
+}
+
+.machine-gauche {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Le nom reste « Dynamo » dans les données : la capitale est un style. */
+.machine-nom {
+  margin: 0 0 2px;
+  color: var(--texte);
+  font-size: 15px;
+  text-transform: uppercase;
+}
+
+.nouveau {
+  color: var(--cyan);
+}
+
+.machine-etat {
+  color: var(--texte-doux);
+  font-size: 20px;
+}
+
+.machine-produit {
+  color: var(--texte-2);
+  font-size: 20px;
+}
+
+.machine-droite {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.machine-prix {
+  white-space: nowrap;
+}
+
+.machine-attente {
+  color: var(--texte-2);
+  font-size: 18px;
+  text-align: right;
   white-space: nowrap;
 }
 
