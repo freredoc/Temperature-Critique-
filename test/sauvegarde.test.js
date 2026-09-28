@@ -37,5 +37,5 @@ test("SOCLE T1 — la sauvegarde rend les grands nombres tels quels", () => {
   const future = { ...envelopper(etat, { build: 1, sauveLe: 2_000 }), saveVersion: SAVE_VERSION + 1 };
   const refuse = importer(exporter(future));
   assert.equal(refuse.ok, false);
-  assert.match(refuse.erreur, /version 2.*plus récente/);
+  assert.match(refuse.erreur, new RegExp(`version ${SAVE_VERSION + 1}.*plus récente`));
 });

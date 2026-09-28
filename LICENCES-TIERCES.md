@@ -1,8 +1,9 @@
 # Licences tierces
 
-Température Critique intègre les paquets ci-dessous dans son fichier
-unique. Le texte complet de chaque licence suit, recopié tel quel depuis le
-paquet. Ce fichier est lui-même intégré au jeu (Options, puis Licences).
+Température Critique intègre les paquets et les données ci-dessous dans son
+fichier unique. Le texte complet de chaque licence suit, recopié tel quel
+depuis le paquet ou le dépôt d'origine. Ce fichier est lui-même intégré au
+jeu (Options, puis Licences).
 
 | Paquet | Version | Licence | Titulaire |
 |---|---|---|---|
@@ -12,6 +13,7 @@ paquet. Ce fichier est lui-même intégré au jeu (Options, puis Licences).
 | tslib (dépendance de notations) | 2.8.1 | 0BSD | © Microsoft Corporation |
 | VT323 (@fontsource/vt323) | 5.3.0 | OFL-1.1 | © 2011 The VT323 Project Authors |
 | Pixelify Sans (@fontsource/pixelify-sans) | 5.3.0 | OFL-1.1 | © 2021 The Pixelify Sans Project Authors |
+| Antimatter Dimensions (deux tables de coûts, aucun code) | dépôt, relevé le 27/09/2026 | MIT | © 2017 IvarK |
 
 Les deux polices sont intégrées en sous-ensemble `latin` (fichiers woff2
 de Fontsource) : ce sont des versions modifiées au sens de l'OFL. Aucune
@@ -19,9 +21,45 @@ des deux ne déclare de nom de police réservé.
 
 ## Antimatter Dimensions — MIT
 
-Réservé. Le lot SOCLE ne reprend aucun code d'Antimatter Dimensions, seulement
-ses deux bibliothèques ci-dessous. Le texte de sa licence entrera ici au lot
-MACHINES, avec ses tables de coûts.
+Depuis le lot MACHINES, le jeu reprend d'Antimatter Dimensions
+(https://github.com/IvarK/AntimatterDimensionsSourceCode) deux tables de
+données et une règle, et aucune ligne de code :
+
+- les coûts de base des huit machines, `BASE_COSTS`, et leurs facteurs de
+  prix, `BASE_COST_MULTIPLIERS` (`src/core/dimensions/antimatter-dimension.js`,
+  lignes 337 et 339), recopiés dans `src/data/machines.js` ;
+- la règle « tous les 10 achats, le prix est multiplié par le facteur et la
+  production par 2 ».
+
+Le code qui les applique (`src/sim/machines.js`) est écrit pour ce jeu. Il
+s'écarte d'Antimatter Dimensions sur un point, volontairement : une machine
+produit la précédente au plein, sans la division par 10 de l'original.
+
+Texte de la licence, recopié tel quel depuis le fichier `LICENSE` du dépôt :
+
+```text
+MIT License
+
+Copyright (c) 2017 IvarK
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## break_infinity.js 2.2.0 — MIT
 

@@ -16,6 +16,10 @@ import { construire } from "./build.js";
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CAPTURES = join(RACINE, "captures");
 const CLE = "temperature-critique:sauvegarde";
+// La ligne de version se lit dans package.json, jamais recopiée : un bump ne
+// doit pas faire tomber ce scénario.
+const PAQUET = JSON.parse(readFileSync(join(RACINE, "package.json"), "utf8"));
+const VERSION = `${PAQUET.version} · build ${PAQUET.config.build}`;
 const NBSP = / /g;
 
 const { total } = await construire();
@@ -29,6 +33,11 @@ const serveur = createServer((requete, reponse) => {
   if (chemin === "/" || chemin === "/atelier") {
     reponse.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     reponse.end(chemin === "/" ? html : "<!doctype html><title>atelier</title>");
+  } else if (chemin === "/favicon.ico") {
+    // Le Chromium complet demande l'icône de lui-même, le « headless shell »
+    // non : un 404 ici serait une erreur console qui ne vient pas du jeu.
+    reponse.writeHead(204);
+    reponse.end();
   } else {
     reponse.writeHead(404);
     reponse.end();
@@ -38,7 +47,12 @@ await new Promise((ok) => serveur.listen(0, "127.0.0.1", ok));
 const origine = `http://127.0.0.1:${serveur.address().port}`;
 
 mkdirSync(CAPTURES, { recursive: true });
-const navigateur = await chromium.launch();
+// TC_CHROMIUM : chemin d'un Chromium déjà installé, pour les machines où
+// Playwright ne peut pas télécharger le sien (conteneur sans réseau sortant).
+// Absente, rien ne change : c'est le navigateur de `npx playwright install`.
+const navigateur = await chromium.launch(
+  process.env.TC_CHROMIUM ? { executablePath: process.env.TC_CHROMIUM } : {},
+);
 const contexte = await navigateur.newContext({
   viewport: { width: 360, height: 780 },
   deviceScaleFactor: 3,
@@ -84,6 +98,33 @@ const capture = async (nom, cible = page) => {
   await page.evaluate(() => document.fonts.ready);
   await cible.screenshot({ path: join(CAPTURES, nom) });
 };
+// Texte d'un élément, espaces insécables ramenées à des espaces.
+const texteDe = async (selecteur) => (await page.locator(selecteur).innerText()).replace(NBSP, " ");
+const attendreTexte = (selecteur, texte) => page.waitForFunction(
+  ([s, t]) => document.querySelector(s)?.innerText.replace(/ /g, " ") === t,
+  [selecteur, texte], { timeout: 5000 },
+);
+// Les numéros des cartes de machine visibles, « 1,2,3,4 ».
+const cartesVisibles = async () => {
+  const visibles = [];
+  for (let n = 1; n <= 8; n++) {
+    if (await page.locator(`[data-devoile="machine-${n}"]`).isVisible()) visibles.push(n);
+  }
+  return visibles.join(",");
+};
+// L'énergie affichée, en nombre (sous 1000 J seulement : trois décimales).
+const nombreEnergie = async () => Number((await energie()).replace(" J", "").replace(",", "."));
+// Deux images : ce qu'un geste a changé dans l'état est à l'écran.
+const deuxImages = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+const carte = (n, partie) => `[data-devoile="machine-${n}"] .machine-${partie}`;
+const toucherDynamo = () => page.locator(carte(1, "prix")).click();
+async function energieDuModeTest(texte) {
+  await ouvrirOptions();
+  await page.locator("#champ-energie").fill(texte);
+  await page.getByRole("button", { name: "Appliquer" }).click();
+  await fermerOptions();
+}
+let dureeToutAcheter = null;
 
 let code = "";
 let echec = false;
@@ -99,10 +140,10 @@ try {
     await capture("principal.png");
   });
 
-  await etape("3. ≡ ouvre les Options, version « 0.1.0 · build 1 »", async () => {
+  await etape(`3. ≡ ouvre les Options, version « ${VERSION} »`, async () => {
     await ouvrirOptions();
     await page.locator("#options").waitFor({ state: "visible" });
-    egal(await page.locator("#ligne-version").innerText(), "0.1.0 · build 1", "ligne de version");
+    egal(await page.locator("#ligne-version").innerText(), VERSION, "ligne de version");
     await capture("options.png");
   });
 
@@ -253,6 +294,125 @@ try {
     egal(reste, future, "sauvegarde future après sauvegarde et rechargement");
   });
 
+  // --- Lot MACHINES (brief §8) --------------------------------------------
+  // La sauvegarde de version future bloque l'écriture jusqu'au prochain
+  // chargement : on repart d'un stockage vidé. Sous 1000 J l'énergie a trois
+  // décimales et le jeu tourne : on lit des bornes, pas des égalités.
+
+  await etape("M1. partie neuve : « 10 J », la ligne d'aide, la dynamo seule", async () => {
+    await depuisAtelier((cle) => localStorage.removeItem(cle), CLE);
+    await page.goto(`${origine}/`);
+    await attendreEnergie("10 J");
+    if (!(await page.locator("#aide-debut").isVisible())) throw new Error("la ligne d'aide n'est pas visible");
+    if (await page.locator("#production").isVisible()) throw new Error("la ligne de production est visible");
+    if (await page.locator("#commandes-achat").isVisible()) throw new Error("les commandes d'achat sont visibles");
+    egal(await cartesVisibles(), "1", "cartes visibles");
+    await capture("debut.png");
+  });
+
+  await etape("M2. toucher la dynamo : « +1 J/s », l'alternateur paraît « Nouveau », l'aide s'en va", async () => {
+    await toucherDynamo();
+    const e = await nombreEnergie();
+    if (!(e < 2)) throw new Error(`énergie ${e} J juste après l'achat, attendu moins de 2 J`);
+    await attendreTexte("#production", "+1 J/s");
+    if (!(await page.locator("#production").isVisible())) throw new Error("la ligne de production n'est pas visible");
+    egal(await cartesVisibles(), "1,2", "cartes visibles");
+    if (!(await page.locator('[data-devoile="machine-2"] .nouveau').isVisible())) throw new Error("l'alternateur n'est pas marqué « Nouveau »");
+    if (await page.locator("#aide-debut").isVisible()) throw new Error("la ligne d'aide est encore visible");
+  });
+
+  await etape("M3. mode test « +1 min » : l'énergie gagne au moins 60 J", async () => {
+    const t0 = Date.now();
+    const e0 = await nombreEnergie();
+    await ouvrirOptions();
+    const version = page.locator("#ligne-version");
+    for (let i = 0; i < 7; i++) await version.click();
+    await page.locator("#mode-test").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "+1 min" }).click();
+    await fermerOptions();
+    await deuxImages();
+    const e1 = await nombreEnergie();
+    const secondes = (Date.now() - t0) / 1000;
+    const gain = e1 - e0;
+    if (gain < 60 || gain > 60 + secondes + 1) {
+      throw new Error(`gain ${gain.toFixed(3)} J en ${secondes.toFixed(2)} s réelles, attendu entre 60 et ${(61 + secondes).toFixed(3)}`);
+    }
+  });
+
+  await etape("M4. énergie 1e6, neuf dynamos de plus : « 10 · ×2 · lot 0/10 », « 10 000 J »", async () => {
+    await energieDuModeTest("1e6");
+    await attendreEnergie("1,00e6 J");
+    for (let i = 0; i < 9; i++) await toucherDynamo();
+    await deuxImages();
+    egal(await texteDe(carte(1, "etat")), "10 · ×2 · lot 0/10", "état de la dynamo");
+    egal(await texteDe(carte(1, "prix")), "10 000 J", "prix de la dynamo");
+    if (await page.locator("#commandes-achat").isVisible()) throw new Error("les commandes d'achat sont visibles");
+  });
+
+  await etape("M5. toucher l'alternateur : les commandes paraissent ; « Jusqu'à 10 » : « 900 J », « 100 000 J »", async () => {
+    await page.locator(carte(2, "prix")).click();
+    await page.locator("#commandes-achat").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Jusqu'à 10" }).click();
+    await deuxImages();
+    egal(await texteDe(carte(2, "prix")), "900 J", "prix de l'alternateur, jusqu'à 10");
+    egal(await texteDe(carte(1, "prix")), "100 000 J", "prix de la dynamo, jusqu'à 10");
+    await page.getByRole("button", { name: "×1" }).click();
+    await deuxImages();
+    egal(await texteDe(carte(1, "prix")), "10 000 J", "prix de la dynamo, retour à ×1");
+  });
+
+  await etape("M6. énergie 1e400, « Tout acheter » : moins de 50 ms, centrale 660, cartes 5–8 cachées", async () => {
+    await energieDuModeTest("1e400");
+    await attendreEnergie("1,00e400 J");
+    dureeToutAcheter = await page.evaluate(() => {
+      const bouton = document.getElementById("tout-acheter");
+      const t0 = performance.now();
+      bouton.click();
+      return performance.now() - t0;
+    });
+    if (!(dureeToutAcheter < 50)) throw new Error(`« Tout acheter » : ${dureeToutAcheter.toFixed(1)} ms`);
+    const centrale = await texteDe(carte(4, "etat"));
+    if (!centrale.startsWith("660 ·")) throw new Error(`centrale : « ${centrale} »`);
+    egal(await cartesVisibles(), "1,2,3,4", "cartes visibles");
+    const mesure = await page.evaluate(() => ({ page: document.documentElement.scrollWidth, fenetre: innerWidth }));
+    if (mesure.page > mesure.fenetre) throw new Error(`défilement horizontal : ${JSON.stringify(mesure)}`);
+    await capture("couche1.png");
+  });
+
+  await etape("M7. « Sauvegarder », rechargement : centrale toujours 660, quatre cartes", async () => {
+    await ouvrirOptions();
+    await page.getByRole("button", { name: "Sauvegarder maintenant" }).click();
+    egal(await page.locator("#message-sauvegarde").innerText(), "Sauvegardé.", "message");
+    await page.reload();
+    await page.waitForFunction(
+      () => document.querySelector('[data-devoile="machine-4"] .machine-etat')?.innerText.startsWith("660 ·"),
+      null, { timeout: 5000 },
+    );
+    egal(await cartesVisibles(), "1,2,3,4", "cartes visibles");
+  });
+
+  await etape("M8. sauvegarde du SOCLE (v1) : chargée, copiée telle quelle, réécrite en v2", async () => {
+    const texte = await depuisAtelier((cle) => {
+      const t = `{"saveVersion":1,"build":1,"sauveLe":${Date.now()},"etat":{"meta":{"creeLe":1000,"modeTestUtilise":true},"temps":{"totalMs":5000},"energie":{"$d":"1e400"}}}`;
+      localStorage.setItem(cle, t);
+      return t;
+    }, CLE);
+    await page.goto(`${origine}/`);
+    await attendreEnergie("1,00e400 J");
+    egal(await page.locator(".bandeau.encart-orange").count(), 0, "bandeaux orange");
+    egal(await cartesVisibles(), "1", "cartes visibles");
+    if (!(await page.locator("#aide-debut").isVisible())) throw new Error("la ligne d'aide n'est pas visible");
+    const copies = await page.evaluate(() => Object.keys(localStorage)
+      .filter((k) => k.startsWith("temperature-critique:sauvegarde-v1:"))
+      .map((k) => localStorage.getItem(k)));
+    egal(copies.length, 1, "copies de la sauvegarde v1");
+    egal(copies[0], texte, "copie de la sauvegarde v1");
+    await ouvrirOptions();
+    await page.getByRole("button", { name: "Sauvegarder maintenant" }).click();
+    egal(await page.evaluate((cle) => JSON.parse(localStorage.getItem(cle)).saveVersion, CLE), 2, "saveVersion après sauvegarde");
+    await fermerOptions();
+  });
+
   await etape("zéro erreur dans la console, aucune requête hors de l'origine locale", async () => {
     if (erreurs.length) throw new Error(`${erreurs.length} erreur(s) : ${erreurs.join(" | ")}`);
     if (horsOrigine.length) throw new Error(`requêtes hors origine : ${horsOrigine.join(", ")}`);
@@ -266,7 +426,8 @@ try {
 
 console.log(`\nerreurs console : ${erreurs.length} · avertissements : ${avertissements.length}`);
 for (const a of avertissements) console.log(`  avertissement : ${a}`);
-console.log("captures : principal.png, options.png, mode-test.png, phrase-temoin.png, absence.png (dans captures/)");
+console.log("captures : principal.png, options.png, mode-test.png, phrase-temoin.png, absence.png, debut.png, couche1.png (dans captures/)");
+if (dureeToutAcheter !== null) console.log(`« Tout acheter » à 1e400 J : ${dureeToutAcheter.toFixed(1)} ms`);
 if (echec) {
   console.log("voir : ÉCHEC");
   process.exit(1);

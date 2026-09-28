@@ -32,3 +32,17 @@ export function mettreDeCote(texte, horodatage) {
     return { ok: false, erreur: `impossible de la mettre de côté (${e.message})` };
   }
 }
+
+// Avant qu'une sauvegarde migrée ne soit réécrite dans la version courante,
+// son texte d'origine est copié tel quel sous une clé qui porte sa version
+// et l'heure du chargement. Une migration fautive se rattrape ainsi à la
+// main ; sans la copie, la première autosauvegarde l'écraserait.
+export function copierAvantMigration(texte, version, horodatage) {
+  const cle = `temperature-critique:sauvegarde-v${version}:${horodatage}`;
+  try {
+    localStorage.setItem(cle, texte);
+    return { ok: true, cle };
+  } catch (e) {
+    return { ok: false, erreur: `impossible de la copier avant de la migrer (${e.message})` };
+  }
+}

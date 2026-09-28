@@ -6,9 +6,10 @@ Jeu incrémental de physique, du labo de cryogénie jusqu'au cosmos : un seul
 fichier HTML, hors ligne, en 8 bits, joué sur le téléphone d'Ethan.
 
 **Où vit le plan** : dans le projet Claude « Jeu Mobile »,
-`claude/DESIGN-TEMPERATURE-CRITIQUE.md`. Il n'est pas dans le dépôt : chaque
-brief en recopie ce qu'il lui faut. Les briefs et les rapports sont dans
-`rapports/`.
+`claude/DESIGN-TEMPERATURE-CRITIQUE.md`. Une copie est à la racine du dépôt
+depuis le 27/09, avec `PASSATION-2026-09-27.md` ; en cas d'écart, l'original
+du projet fait foi, et chaque brief recopie ce qu'il lui faut. Les briefs et
+les rapports sont dans `rapports/`.
 
 ## Les règles
 
@@ -59,10 +60,30 @@ brief en recopie ce qu'il lui faut. Les briefs et les rapports sont dans
   `Decimal` où qu'il soit, `migrations`, export `TC1.` + base64url) ;
   `src/ui/stockage.js` est la **seule porte** vers `localStorage`. Rien ne
   s'efface en silence : une sauvegarde illisible est mise de côté, une
-  sauvegarde plus récente n'est jamais écrasée.
+  sauvegarde plus récente n'est jamais écrasée, et une sauvegarde d'une
+  version antérieure est copiée telle quelle (`copierAvantMigration`, clé
+  `temperature-critique:sauvegarde-v<N>:<heure>`) avant la première écriture ;
+  si la copie échoue, rien n'est écrit. Une migration décrit la forme de SON
+  époque en toutes lettres et ne lit jamais une table de `src/data/`.
 - **Le dévoilement** passe par `src/data/devoilement.js`
   (`{ id, condition(etat) }` ↔ `[data-devoile="id"]`) : jamais de
   `if (lot >= n)` dans l'écran.
+- **Les machines** : les huit sont des données (`src/data/machines.js` :
+  coût, facteur, noms), la cascade est pure (`src/sim/machines.js` :
+  `prix`, `production`, `produire`, `acheter`, `acheterLot`, `toutAcheter`,
+  utilisables sous Node sans DOM). La machine n produit la machine n − 1 **au
+  plein, sans la division par 10 d'AD** — écart voulu, ne pas « corriger ».
+  `produire` est un **Euler explicite sur les quantités du DÉBUT du pas** :
+  toutes les productions se calculent d'abord, puis s'ajoutent.
+  Une machine porte `quantite` (Decimal, achats plus cascade) et `achetees`
+  (entier, les seuls achats) : **c'est `achetees` qui fixe le prix et le
+  multiplicateur**, jamais `quantite`. `decouvertes.machines` (la plus haute
+  machine jamais achetée) **ne descend jamais** et dévoile les cartes.
+  `machinesDebloquees` vaut 4 ; le lot FROID l'ouvrira.
+- **Les cartes de machines** sont générées depuis `MACHINES` par
+  `src/ui/machines.js` (aucune n'est écrite dans `index.html`), avant
+  `monterEcran`, qui exige un élément par entrée de `DEVOILEMENT`. Elles ne
+  réécrivent que les textes qui changent et sautent les cartes cachées.
 - **L'affichage des nombres** passe par `src/ui/format.js` : `formater` pour
   les quantités de jeu (virgule, U+00A0, scientifique dès 10⁶).
 - **Les 16 couleurs** : `src/data/palette.js`, reprises en variables dans
@@ -82,12 +103,13 @@ brief en recopie ce qu'il lui faut. Les briefs et les rapports sont dans
 | `npm run build` | `dist/index.html`, un seul fichier hors ligne ; échoue sur une ressource réseau, une 2ᵉ copie de break_infinity.js, une couleur hors palette |
 | `npm test` | les tests (`node --test "test/*.test.js"`) |
 | `npm run check` | garde-sim, puis les tests, puis le build : ce que lance la CI |
-| `npm run voir` | build, serveur local, scénario Playwright dans Chromium (360 × 780, DPR 3) ; captures dans `captures/` |
+| `npm run voir` | build, serveur local, scénario Playwright dans Chromium (360 × 780, DPR 3) : 22 étapes, captures dans `captures/` |
 
 - Node ≥ 22 (la CI tourne en 22). Sur le PC d'Ethan, un Node 22 portable est
   en tête du PATH (`claudax/outils/node22`) ; le Node 24 de Program Files
   existe aussi.
 - Premier `npm run voir` sur une machine : `npx playwright install chromium`.
+  Sur une machine où Chromium est déjà installé ailleurs : `TC_CHROMIUM=<chemin>`.
 - `dist/` et `captures/` ne sont pas versionnés.
 
 ## L'état
@@ -96,9 +118,10 @@ brief en recopie ce qu'il lui faut. Les briefs et les rapports sont dans
 
 | | |
 |---|---|
-| Dernier lot | SOCLE |
-| Version · build | 0.1.0 · build 1 |
-| `SAVE_VERSION` | 1 |
-| Tests | 2 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage) |
-| `dist/index.html` | 172 907 octets |
+| Dernier lot | MACHINES |
+| Version · build | 0.2.0 · build 2 |
+| `SAVE_VERSION` | 2 |
+| Tests | 4 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage, MACHINES T1 sauvegarde v1 → v2, MACHINES T2 cascade) |
+| `dist/index.html` | 189 877 octets |
+| Rendu | vu dans Chromium (`npm run voir`, 22 étapes) ; pas encore sur le téléphone |
 | Jouer | https://freredoc.github.io/Temperature-Critique-/ |
