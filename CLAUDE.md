@@ -32,13 +32,35 @@ les rapports sont dans `rapports/`.
 - Dépendances **épinglées sans `^`** : `npm install --save-exact`.
 - Relecture hostile avant la PR : qui d'autre écrit ce champ ? qui d'autre lit
   cet état ? cet état est-il seulement atteignable ?
+- Tout lot qui touche `src/sim/` ou `src/data/` **relance `npm run mesure`**,
+  versionne `mesures/MESURE.md`, et cite l'écart dans son rapport.
+- Tout lot qui ajoute une mécanique **ajoute sa stratégie** au joueur
+  automatique (`tools/joueur-auto/strategies.js`), et fait passer ses cibles
+  de « pas encore mesurable » à mesurées (`tools/joueur-auto/cibles.js`).
 
 ## L'architecture
 
 - **`src/sim/` est pur** : jamais `window`, `document`, `localStorage`,
   `Date`, `performance`, `Math.random`, ni minuterie. Le temps lui arrive en
   argument. `tools/garde-sim.js` fait échouer `npm run check` sinon. C'est ce
-  qui la fait tourner sous Node (tests, futur joueur automatique).
+  qui la fait tourner sous Node (tests, joueur automatique).
+- **Le joueur automatique** (`tools/joueur-auto/`, `npm run mesure`) joue la
+  simulation pure sous Node et écrit `mesures/MESURE.md`, les temps face aux
+  cibles du plan. Trois règles :
+  - **il ne réimplémente aucune règle du jeu** : il appelle `etatInitial`,
+    `avancer`, `toutAcheter`, `rattraper`, `serialiser`/`deserialiser`, jamais
+    un prix ou une production à lui ;
+  - **il est déterministe** : ni horloge, ni hasard, aucun état gardé au
+    niveau du module, ni date ni durée dans le rapport. Mêmes options, même
+    texte au caractère près ;
+  - **il avance au pas du jeu** : `PAS_MS`, jamais un autre pas ; le hors
+    ligne passe par `rattraper`, comme dans le jeu.
+
+  **`lancer.js` est le seul fichier impur** (il lit `package.json`, écrit le
+  fichier, affiche la durée d'exécution dans la console seulement). Les six
+  autres sont purs, et `tools/garde-sim.js` les garde comme `src/sim/` : mêmes
+  interdits plus `process`, imports limités à `./…` (sauf `./lancer.js`),
+  `src/sim/`, `src/data/` et `src/ui/format.js`.
 - **Un `Decimal` pour toute ressource**, même quand elle vaut 10, importé
   depuis `src/sim/nombre.js`, le seul fichier qui importe `break_infinity.js`
   (deux copies casseraient `instanceof` sans erreur ; le build refuse une
@@ -104,6 +126,7 @@ les rapports sont dans `rapports/`.
 | `npm test` | les tests (`node --test "test/*.test.js"`) |
 | `npm run check` | garde-sim, puis les tests, puis le build : ce que lance la CI |
 | `npm run voir` | build, serveur local, scénario Playwright dans Chromium (360 × 780, DPR 3) : 22 étapes, captures dans `captures/` |
+| `npm run mesure` | joueur automatique : joue la partie de référence et écrit `mesures/MESURE.md` (versionné) ; **hors de `check`**, seuls ses deux tests y entrent |
 
 - Node ≥ 22 (la CI tourne en 22). Sur le PC d'Ethan, un Node 22 portable est
   en tête du PATH (`claudax/outils/node22`) ; le Node 24 de Program Files
@@ -118,10 +141,11 @@ les rapports sont dans `rapports/`.
 
 | | |
 |---|---|
-| Dernier lot | MACHINES |
-| Version · build | 0.2.0 · build 2 |
-| `SAVE_VERSION` | 2 |
-| Tests | 4 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage, MACHINES T1 sauvegarde v1 → v2, MACHINES T2 cascade) |
-| `dist/index.html` | 189 877 octets |
+| Dernier lot | JOUEUR-AUTO (le jeu n'a pas changé d'un octet) |
+| Version · build | 0.2.0 · build 2 (inchangés) |
+| `SAVE_VERSION` | 2 (inchangé) |
+| Tests | 6 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage, MACHINES T1 sauvegarde v1 → v2, MACHINES T2 cascade, JOUEUR-AUTO T1 déterminisme, JOUEUR-AUTO T2 instrument du hors ligne) |
+| `dist/index.html` | 189 877 octets (inchangé, SHA-256 `9ff6d56a…4791`) |
+| Mesure | `mesures/MESURE.md` : 10⁹ J en 3 min 42 s (cible 3 min 43 s) ; écart hors ligne −0,1 à −0,6 % |
 | Rendu | vu dans Chromium (`npm run voir`, 22 étapes) ; pas encore sur le téléphone |
 | Jouer | https://freredoc.github.io/Temperature-Critique-/ |

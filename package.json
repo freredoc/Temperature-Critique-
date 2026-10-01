@@ -11,7 +11,8 @@
     "build": "node tools/build.js",
     "test": "node --test \"test/*.test.js\"",
     "check": "node tools/garde-sim.js && npm test && npm run build",
-    "voir": "node tools/voir.js"
+    "voir": "node tools/voir.js",
+    "mesure": "node tools/joueur-auto/lancer.js"
   },
   "dependencies": {
     "@antimatter-dimensions/notations": "3.2.0",

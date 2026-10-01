@@ -774,7 +774,10 @@ cachés : le jeu affiche la condition de chacun.
 ### 11.3 Le hors ligne
 
 - Au retour, le jeu **rejoue le temps écoulé** avec les mêmes formules et les
-  automatismes actifs. C'est exact, parce que la simulation est déterministe.
+  automatismes actifs, **par grands pas (1000 au plus, comme AD)**. Ce n'est
+  **pas exact** : un grand pas n'intègre pas une cascade comme mille petits.
+  Corrigé le 24/09 au soir (lot SOCLE), et l'écart se mesure avec le joueur
+  automatique.
 - Les décharges automatiques se rejouent comme le reste. Le tower defense
   (couche 4), lui, rapporte hors ligne la moyenne de tes 10 derniers runs.
   L'étoile continue de vivre. Le trou noir reste à la position de croisière.
@@ -824,7 +827,8 @@ cachés : le jeu affiche la condition de chacun.
 - **L'affichage des nombres : `@antimatter-dimensions/notations`** (MIT).
 - **La simulation est pure et déterministe** : pas fixe, et un hasard semé
   (graine sauvegardée) pour les vagues et les choix 1 parmi 3. Elle tourne
-  sous Node, ce qui rend les tests falsifiables et le hors ligne exact.
+  sous Node, ce qui rend les tests falsifiables et le hors ligne reproductible
+  (même résultat à chaque fois, mais approché, voir §11.3).
 - **Sauvegarde** locale, avec export et import en texte, et `SAVE_VERSION` dès
   le premier lot.
 - **Les mentions MIT** d'AD, de break_infinity, de notations et d'Incremental
