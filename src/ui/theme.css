@@ -115,6 +115,55 @@ p {
   color: var(--texte-doux);
 }
 
+/* --- Le froid ----------------------------------------------------------- */
+
+/* Sous l'énergie, et pas collé en haut : seule .tete l'est. */
+.froid {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px solid var(--trait);
+  background: var(--cyan-fond);
+  overflow-wrap: anywhere;
+}
+
+.froid-temperature {
+  color: var(--cyan);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.froid-explication {
+  color: var(--texte-2);
+  font-size: 20px;
+}
+
+.froid-suivant {
+  display: grid;
+  gap: 8px;
+}
+
+/* La jauge du palier, en échelle logarithmique (src/ui/froid.js). */
+.jauge {
+  height: 16px;
+  border: 2px solid var(--trait);
+  background: var(--surface-2);
+}
+
+.jauge-remplie {
+  width: 0;
+  height: 100%;
+  background: var(--cyan-graphe);
+}
+
+.froid-suivant .bouton-principal {
+  justify-self: start;
+}
+
+.froid-suivant .aide {
+  font-size: 20px;
+}
+
 /* --- Les machines ------------------------------------------------------- */
 
 .commandes {
@@ -256,6 +305,15 @@ button:disabled {
   background: var(--orange);
   box-shadow: 4px 4px 0 var(--orange-ombre);
   color: var(--fond);
+}
+
+/* Grisé tant qu'il ne sert à rien (« Refroidir » sous le seuil) : sans
+   cette règle, le texte gris resterait sur le fond orange. */
+.bouton-principal:disabled {
+  border-color: var(--trait-fort);
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--texte-2);
 }
 
 button[aria-pressed="true"] {

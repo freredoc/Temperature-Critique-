@@ -1,9 +1,10 @@
 import { Decimal } from "./nombre.js";
+import { PALIERS } from "../data/froid.js";
 import { MACHINES } from "../data/machines.js";
 
 // Version du schéma de l'état, déclarée ici et nulle part ailleurs. Elle ne
 // bouge que si le schéma change, et une entrée de `migrations` l'accompagne.
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 // migrations[v] transforme une enveloppe de version v en version v + 1.
 // Une migration décrit la forme de SON époque, en toutes lettres : elle ne lit
@@ -22,7 +23,20 @@ migrations[1] = (env) => {
   return env;
 };
 
+// 2 → 3 (lot FROID) : le palier de froid, et le plus haut palier jamais
+// atteint. Une partie v2 n'a jamais refroidi : elle est à l'ambiante, au
+// palier 0, et rien d'autre ne bouge — ni l'énergie, ni les machines, ni la
+// plus haute machine découverte, ni le mode d'achat, ni le temps.
+migrations[2] = (env) => {
+  if (estObjet(env.etat)) {
+    env.etat.froid = { palier: 0 };
+    if (estObjet(env.etat.decouvertes)) env.etat.decouvertes.paliers = 0;
+  }
+  return env;
+};
+
 const MODES_ACHAT = ["un", "lot"];
+const DERNIER_PALIER = PALIERS.length - 1;
 
 const PREFIXE_CODE = "TC1.";
 
@@ -171,9 +185,24 @@ function defautDeForme(enveloppe) {
       return `l'état est incomplet : « machines[${i}].achetees » manque ou n'est pas un entier positif`;
     }
   }
-  const decouvertes = estObjet(etat.decouvertes) ? etat.decouvertes.machines : undefined;
-  if (!Number.isInteger(decouvertes) || decouvertes < 0 || decouvertes > MACHINES.length) {
+  const decouvertes = estObjet(etat.decouvertes) ? etat.decouvertes : {};
+  if (!entierEntre(decouvertes.machines, 0, MACHINES.length)) {
     return `l'état est incomplet : « decouvertes.machines » manque ou n'est pas entre 0 et ${MACHINES.length}`;
+  }
+  // Le palier courant AVANT le plus haut palier atteint : un palier hors
+  // bornes se nomme lui-même, au lieu de passer pour un « plus haut palier »
+  // trop bas.
+  const palier = estObjet(etat.froid) ? etat.froid.palier : undefined;
+  if (!entierEntre(palier, 0, DERNIER_PALIER)) {
+    return `l'état est incomplet : « froid.palier » manque ou n'est pas un entier entre 0 et ${DERNIER_PALIER}`;
+  }
+  if (!entierEntre(decouvertes.paliers, 0, DERNIER_PALIER)) {
+    return `l'état est incomplet : « decouvertes.paliers » manque ou n'est pas un entier entre 0 et ${DERNIER_PALIER}`;
+  }
+  // Le plus haut palier atteint ne peut pas être sous le palier courant.
+  if (decouvertes.paliers < palier) {
+    return `l'état est incohérent : « decouvertes.paliers » vaut ${decouvertes.paliers}, `
+      + `sous le palier courant (${palier})`;
   }
   const mode = estObjet(etat.preferences) ? etat.preferences.modeAchat : undefined;
   if (!MODES_ACHAT.includes(mode)) {
@@ -184,6 +213,10 @@ function defautDeForme(enveloppe) {
 
 function estFini(d) {
   return Number.isFinite(d.mantissa) && Number.isFinite(d.exponent);
+}
+
+function entierEntre(n, min, max) {
+  return Number.isInteger(n) && n >= min && n <= max;
 }
 
 function refus(cause, message) {

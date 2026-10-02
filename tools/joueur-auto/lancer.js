@@ -3,8 +3,9 @@
 // Cette durée ne va QUE dans la console : le texte versionné n'en porte
 // aucune, pour que deux mesures des mêmes règles donnent le même fichier.
 //
-// `npm run mesure`. Hors de `npm run check`, délibérément : une partie de
-// 10⁹ J et neuf comparaisons de hors ligne prennent quelques secondes.
+// `npm run mesure`. Hors de `npm run check`, délibérément : une partie
+// jusqu'au palier 6 et douze comparaisons de hors ligne, dont celles d'un
+// jour entier avec huit machines, prennent une demi-minute.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -13,14 +14,17 @@ import { mesurer } from "./mesurer.js";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-// Les options de référence (brief JOUEUR-AUTO §4.1). Les changer change la
+// Les options de référence (brief FROID §6.3). Les changer change la
 // mesure : un lot qui le fait le dit dans son rapport.
+//
+// Les instantanés tombent juste avant les paliers 1, 2, 4 et 6, avec 4, 5, 7
+// puis 8 machines en marche.
 export const OPTIONS_DE_REFERENCE = {
-  strategie: "machines",
+  strategie: "froid",
   cadenceMs: 250,
-  jusqua: "1e9",
+  jusquaPalier: 6,
   dureeMaxMs: 7_200_000,
-  instantanes: ["1e3", "1e6", "1e9"],
+  instantanes: ["1e9", "1e15", "1e30", "1e44"],
   absences: [3_600_000, 28_800_000, 86_400_000],
 };
 

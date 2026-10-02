@@ -1,11 +1,11 @@
 {
   "name": "temperature-critique",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Température Critique : jeu incrémental de physique, du labo de cryogénie jusqu'au cosmos.",
   "type": "module",
   "config": {
-    "build": 2
+    "build": 3
   },
   "scripts": {
     "build": "node tools/build.js",

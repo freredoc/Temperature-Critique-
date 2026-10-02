@@ -7,8 +7,8 @@
 // https://github.com/IvarK/AntimatterDimensionsSourceCode
 //
 // Les nombres sont écrits en texte et ne deviennent des Decimal qu'une fois,
-// dans src/sim/machines.js. Les noms 6 et 7 sont une proposition, en attente
-// d'Ethan : aucun nom de machine n'est écrit ailleurs dans le code.
+// dans src/sim/machines.js. Les noms 6 et 7 sont tranchés par Ethan le 02/10 :
+// aucun nom de machine n'est écrit ailleurs dans le code.
 export const MACHINES = [
   { id: 1, nom: "Dynamo",        pluriel: "dynamos",        cout: "10",   facteur: "1e3"  },
   { id: 2, nom: "Alternateur",   pluriel: "alternateurs",   cout: "100",  facteur: "1e4"  },

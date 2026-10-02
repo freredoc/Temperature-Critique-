@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
 
+import { Decimal } from "../src/sim/nombre.js";
+import { SAVE_VERSION, serialiser } from "../src/sim/sauvegarde.js";
 import { construire } from "./build.js";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,6 +126,42 @@ async function energieDuModeTest(texte) {
   await page.getByRole("button", { name: "Appliquer" }).click();
   await fermerOptions();
 }
+async function ouvrirModeTest() {
+  await ouvrirOptions();
+  const version = page.locator("#ligne-version");
+  for (let i = 0; i < 7; i++) await version.click();
+  await page.locator("#mode-test").waitFor({ state: "visible" });
+  await fermerOptions();
+}
+async function visible(selecteur) {
+  return page.locator(selecteur).isVisible();
+}
+// Ni défilement horizontal, ni rien qui dépasse du bloc froid ou de la
+// gouttière de 16 px.
+async function sansDebordement() {
+  const mesure = await page.evaluate(() => {
+    const bloc = document.getElementById("froid");
+    const cadre = bloc.hidden ? null : bloc.getBoundingClientRect();
+    const dehors = cadre === null ? [] : [...bloc.querySelectorAll("*")]
+      .filter((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().right > cadre.right + 0.5)
+      .map((el) => el.id || el.className);
+    return {
+      page: document.documentElement.scrollWidth,
+      fenetre: innerWidth,
+      droiteDuBloc: cadre === null ? null : cadre.right,
+      dehors,
+    };
+  });
+  if (mesure.page > mesure.fenetre) throw new Error(`défilement horizontal : ${JSON.stringify(mesure)}`);
+  if (mesure.droiteDuBloc !== null && mesure.droiteDuBloc > mesure.fenetre - 16) {
+    throw new Error(`le bloc froid mord sur la gouttière : ${JSON.stringify(mesure)}`);
+  }
+  if (mesure.dehors.length) throw new Error(`débordement du bloc froid : ${mesure.dehors.join(", ")}`);
+}
+const apercuAttendu = (machine) => "Tu repars de 10 J, sans machines. En échange : toutes les machines ×2"
+  + (machine === null ? "." : `, et une nouvelle machine : ${machine}.`);
+const explicationAttendue = (fois) => "Plus il fait froid, moins le cuivre résiste : toutes les machines ×2 par palier. "
+  + `Ici : ×${fois}.`;
 let dureeToutAcheter = null;
 
 let code = "";
@@ -391,7 +429,7 @@ try {
     egal(await cartesVisibles(), "1,2,3,4", "cartes visibles");
   });
 
-  await etape("M8. sauvegarde du SOCLE (v1) : chargée, copiée telle quelle, réécrite en v2", async () => {
+  await etape("M8. sauvegarde du SOCLE (v1) : chargée, copiée telle quelle, réécrite dans la version courante", async () => {
     const texte = await depuisAtelier((cle) => {
       const t = `{"saveVersion":1,"build":1,"sauveLe":${Date.now()},"etat":{"meta":{"creeLe":1000,"modeTestUtilise":true},"temps":{"totalMs":5000},"energie":{"$d":"1e400"}}}`;
       localStorage.setItem(cle, t);
@@ -409,7 +447,170 @@ try {
     egal(copies[0], texte, "copie de la sauvegarde v1");
     await ouvrirOptions();
     await page.getByRole("button", { name: "Sauvegarder maintenant" }).click();
-    egal(await page.evaluate((cle) => JSON.parse(localStorage.getItem(cle)).saveVersion, CLE), 2, "saveVersion après sauvegarde");
+    // La version courante se lit, elle ne s'écrit pas en dur.
+    egal(await page.evaluate((cle) => JSON.parse(localStorage.getItem(cle)).saveVersion, CLE), SAVE_VERSION, "saveVersion après sauvegarde");
+    await fermerOptions();
+  });
+
+  // --- Lot FROID (brief §7) -----------------------------------------------
+  // Une partie neuve, depuis un stockage vidé. Le mode test ne sert qu'à se
+  // donner de l'énergie : chaque palier se descend en touchant « Refroidir ».
+
+  await etape("F1. le bloc froid arrive avec la Turbine : « 300 K · ambiante », « … Il faut 1,00e9 J. », bouton grisé", async () => {
+    await depuisAtelier(() => localStorage.clear());
+    await page.goto(`${origine}/`);
+    await attendreEnergie("10 J");
+    await ouvrirModeTest();
+    await energieDuModeTest("1e7");
+    await attendreEnergie("1,00e7 J");
+    if (await visible("#froid")) throw new Error("le bloc froid est visible dans une partie neuve");
+    await page.locator(carte(1, "prix")).click();
+    await page.locator(carte(2, "prix")).click();
+    if (await visible("#froid")) throw new Error("le bloc froid est visible avant la Turbine");
+    await page.locator(carte(3, "prix")).click();
+    await page.locator("#froid").waitFor({ state: "visible" });
+    egal(await texteDe(".froid-temperature"), "300 K · ambiante", "température");
+    egal(await texteDe("#objectif"), "Prochain palier : 194,65 K, glace carbonique. Il faut 1,00e9 J.", "objectif");
+    egal(await texteDe("#refroidir"), "Refroidir à 194,65 K", "bouton");
+    if (!(await page.locator("#refroidir").isDisabled())) throw new Error("le bouton « Refroidir » n'est pas grisé");
+    if (await visible("#froid-explication")) throw new Error("l'explication est visible avant le premier palier");
+    await sansDebordement();
+    await capture("froid-debut.png");
+    await page.locator(carte(4, "prix")).click();
+    egal(await cartesVisibles(), "1,2,3,4", "cartes visibles");
+  });
+
+  await etape("F2. énergie 1e9 : le bouton s'allume, « Tu peux refroidir à 194,65 K. », l'aperçu nomme le Réseau", async () => {
+    await energieDuModeTest("1e9");
+    await page.waitForFunction(() => !document.getElementById("refroidir").disabled, null, { timeout: 5000 });
+    egal(await texteDe("#objectif"), "Tu peux refroidir à 194,65 K.", "objectif");
+    egal(await texteDe("#apercu-refroidir"), apercuAttendu("Réseau"), "aperçu");
+    egal(await page.locator(".jauge").getAttribute("aria-valuenow"), "100", "jauge");
+    await sansDebordement();
+    await capture("froid.png");
+  });
+
+  await etape("F3. « Refroidir » : « 10 J », « 194,65 K · glace carbonique », « +0 J/s », la Dynamo ×2, le Réseau « Nouveau »", async () => {
+    await page.locator("#refroidir").click();
+    await attendreEnergie("10 J");
+    egal(await texteDe(".froid-temperature"), "194,65 K · glace carbonique", "température");
+    egal(await texteDe("#production"), "+0 J/s", "production");
+    egal(await cartesVisibles(), "1,2,3,4,5", "cartes visibles");
+    egal(await texteDe(carte(1, "etat")), "0 · ×2 · lot 0/10", "état de la Dynamo");
+    egal(await texteDe(carte(1, "prix")), "10 J", "prix de la Dynamo");
+    if (!(await visible('[data-devoile="machine-5"] .nouveau'))) throw new Error("le Réseau n'est pas marqué « Nouveau »");
+    egal(await texteDe(carte(5, "prix")), "1,00e9 J", "prix du Réseau");
+    egal(await texteDe("#froid-explication"), explicationAttendue(2), "explication");
+    egal(await texteDe("#objectif"), "Prochain palier : 77,36 K, azote liquide. Il faut 1,00e15 J.", "objectif");
+    // Rien de ce qui a été vu ne disparaît après un palier.
+    for (const s of ["#production", "#commandes-achat", "#froid"]) {
+      if (!(await visible(s))) throw new Error(`${s} a disparu après le palier`);
+    }
+  });
+
+  await etape("F4. jusqu'au palier 6 : « 1,5 K · hélium pompé », bouton et jauge cachés, « Ici : ×64. »", async () => {
+    const paliers = [
+      ["1e15", "77,36 K · azote liquide", "Cyclotron"],
+      ["1e22", "27,1 K · néon liquide", "Synchrotron"],
+      ["1e30", "20,28 K · hydrogène liquide", "Collisionneur"],
+      ["1e39", "4,22 K · hélium liquide", null],
+      ["1e44", "1,5 K · hélium pompé", null],
+    ];
+    for (const [seuil, temperature, machine] of paliers) {
+      egal(await texteDe("#apercu-refroidir"), apercuAttendu(machine), `aperçu avant ${seuil} J`);
+      await energieDuModeTest(seuil);
+      await page.locator("#refroidir").click();
+      await attendreTexte(".froid-temperature", temperature);
+      await attendreEnergie("10 J");
+    }
+    egal(await texteDe("#objectif"), "1,5 K : le plus froid pour l'instant. La suite viendra avec la supraconductivité.", "objectif");
+    if (await visible("#refroidir")) throw new Error("le bouton « Refroidir » est visible au palier 6");
+    if (await visible(".jauge")) throw new Error("la jauge est visible au palier 6");
+    egal(await texteDe("#froid-explication"), explicationAttendue(64), "explication");
+    egal(await cartesVisibles(), "1,2,3,4,5", "cartes visibles");
+    await sansDebordement();
+    await capture("palier6.png");
+    // Le pire cas de la mise en page : 10⁴⁰⁰ J, les huit cartes, de grands
+    // nombres partout. À 1e400 J pile, « Tout acheter » dépense tout en
+    // Collisionneurs : leur 26ᵉ lot coûte 1e400 J, et les 1e385 J déjà
+    // dépensés se perdent dans les 15 chiffres d'un Decimal. Un jour de
+    // cascade remplit les autres cartes, puis l'énergie revient à 1e400.
+    await energieDuModeTest("1e400");
+    await attendreEnergie("1,00e400 J");
+    await page.locator("#tout-acheter").click();
+    egal(await cartesVisibles(), "1,2,3,4,5,6,7,8", "cartes visibles après « Tout acheter »");
+    await ouvrirOptions();
+    await page.getByRole("button", { name: "+1 jour" }).click();
+    await fermerOptions();
+    await energieDuModeTest("1e400");
+    await attendreEnergie("1,00e400 J");
+    await sansDebordement();
+    await capture("palier6-huit.png");
+  });
+
+  await etape("F5. « Sauvegarder maintenant », rechargement : toujours « 1,5 K », le bloc sans bouton", async () => {
+    await ouvrirOptions();
+    await page.getByRole("button", { name: "Sauvegarder maintenant" }).click();
+    egal(await page.locator("#message-sauvegarde").innerText(), "Sauvegardé.", "message");
+    await page.reload();
+    await attendreTexte(".froid-temperature", "1,5 K · hélium pompé");
+    if (!(await visible("#froid"))) throw new Error("le bloc froid n'est pas visible");
+    if (await visible("#refroidir")) throw new Error("le bouton « Refroidir » est visible au palier 6");
+  });
+
+  await etape("F6. la partie d'Ethan (v2) : chargée sans bandeau, copiée telle quelle, réécrite dans la version courante", async () => {
+    // La forme exacte qu'écrivait le lot MACHINES, en toutes lettres et dans
+    // l'ordre de son etatInitial : 3 dynamos achetées, 1 alternateur, 500 J.
+    // `serialiser` n'a pas changé : c'est le texte qu'il écrivait (« 500 »
+    // s'écrit {"$d":"5e2"}).
+    const maintenant = Date.now();
+    const texte = serialiser({
+      saveVersion: 2,
+      build: 2,
+      sauveLe: maintenant,
+      etat: {
+        meta: { creeLe: maintenant - 600_000, modeTestUtilise: false },
+        temps: { totalMs: 600_000 },
+        energie: new Decimal(500),
+        machines: [
+          { quantite: new Decimal(3), achetees: 3 },
+          { quantite: new Decimal(1), achetees: 1 },
+          { quantite: new Decimal(0), achetees: 0 },
+          { quantite: new Decimal(0), achetees: 0 },
+          { quantite: new Decimal(0), achetees: 0 },
+          { quantite: new Decimal(0), achetees: 0 },
+          { quantite: new Decimal(0), achetees: 0 },
+          { quantite: new Decimal(0), achetees: 0 },
+        ],
+        decouvertes: { machines: 2 },
+        preferences: { modeAchat: "un" },
+      },
+    });
+    if (!texte.includes('"energie":{"$d":"5e2"}')) throw new Error(`texte v2 inattendu : ${texte.slice(0, 160)}…`);
+    await depuisAtelier(([cle, t]) => localStorage.setItem(cle, t), [CLE, texte]);
+    await page.goto(`${origine}/`);
+    await page.locator('[data-devoile="machine-2"]').waitFor({ state: "visible" });
+    egal(await page.locator(".bandeau.encart-orange").count(), 0, "bandeaux orange");
+    const e = await nombreEnergie();
+    if (!(e >= 500 && e < 600)) throw new Error(`énergie ${e} J, attendu entre 500 et 600 J`);
+    const dynamo = await texteDe(carte(1, "etat"));
+    if (!/^\d+ · ×1 · lot 3\/10$/.test(dynamo) || Number(dynamo.split(" ")[0]) < 3) {
+      throw new Error(`état de la Dynamo : « ${dynamo} »`);
+    }
+    egal(await texteDe(carte(2, "etat")), "1 · ×1 · lot 1/10", "état de l'Alternateur");
+    egal(await cartesVisibles(), "1,2,3", "cartes visibles");
+    if (await visible("#froid")) throw new Error("le bloc froid est visible sans Turbine achetée");
+    const copies = await page.evaluate(() => Object.keys(localStorage)
+      .filter((k) => k.startsWith("temperature-critique:sauvegarde-v2:"))
+      .map((k) => localStorage.getItem(k)));
+    egal(copies.length, 1, "copies de la sauvegarde v2");
+    egal(copies[0], texte, "copie de la sauvegarde v2");
+    await ouvrirOptions();
+    await page.getByRole("button", { name: "Sauvegarder maintenant" }).click();
+    const relue = await page.evaluate((cle) => JSON.parse(localStorage.getItem(cle)), CLE);
+    egal(relue.saveVersion, SAVE_VERSION, "saveVersion après sauvegarde");
+    egal(relue.etat.froid.palier, 0, "palier après migration");
+    egal(relue.etat.decouvertes.paliers, 0, "plus haut palier après migration");
     await fermerOptions();
   });
 
@@ -426,7 +627,8 @@ try {
 
 console.log(`\nerreurs console : ${erreurs.length} · avertissements : ${avertissements.length}`);
 for (const a of avertissements) console.log(`  avertissement : ${a}`);
-console.log("captures : principal.png, options.png, mode-test.png, phrase-temoin.png, absence.png, debut.png, couche1.png (dans captures/)");
+console.log("captures : principal.png, options.png, mode-test.png, phrase-temoin.png, absence.png, debut.png, couche1.png, "
+  + "froid-debut.png, froid.png, palier6.png, palier6-huit.png (dans captures/)");
 if (dureeToutAcheter !== null) console.log(`« Tout acheter » à 1e400 J : ${dureeToutAcheter.toFixed(1)} ms`);
 if (echec) {
   console.log("voir : ÉCHEC");

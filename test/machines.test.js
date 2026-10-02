@@ -5,7 +5,7 @@ import { avancer } from "../src/sim/avancer.js";
 import { etatInitial } from "../src/sim/etat.js";
 import { acheter, multiplicateur, prix } from "../src/sim/machines.js";
 import { Decimal } from "../src/sim/nombre.js";
-import { envelopper, exporter, importer, relire, serialiser } from "../src/sim/sauvegarde.js";
+import { SAVE_VERSION, envelopper, exporter, importer, relire, serialiser } from "../src/sim/sauvegarde.js";
 
 test("MACHINES T1 — une sauvegarde v1 devient v2, et les machines se relisent", () => {
   // 1. L'enveloppe exacte qu'un joueur du lot SOCLE a dans son stockage.
@@ -17,7 +17,10 @@ test("MACHINES T1 — une sauvegarde v1 devient v2, et les machines se relisent"
   };
   const lu = relire(serialiser(v1));
   assert.equal(lu.ok, true, lu.message);
-  assert.equal(lu.enveloppe.saveVersion, 2);
+  // Une v1 traverse toutes les migrations jusqu'à la version courante : le
+  // test lit SAVE_VERSION, il n'écrit pas en dur un numéro qu'il n'a pas
+  // construit lui-même.
+  assert.equal(lu.enveloppe.saveVersion, SAVE_VERSION);
   assert.equal(lu.migreeDepuis, 1);
   const etat = lu.enveloppe.etat;
   assert.equal(etat.machines.length, 8);

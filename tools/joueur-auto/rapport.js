@@ -1,5 +1,6 @@
+import { ENERGIE_APRES_PALIER, PALIERS } from "../../src/data/froid.js";
 import { MACHINES } from "../../src/data/machines.js";
-import { machinesDebloquees } from "../../src/sim/machines.js";
+import { machinesDebloquees, machinesDebloqueesAuPalier } from "../../src/sim/machines.js";
 import { Decimal } from "../../src/sim/nombre.js";
 import { formater, formaterDuree, formaterEntier } from "../../src/ui/format.js";
 import { CIBLES, TOLERANCE_POUR_MILLE } from "./cibles.js";
@@ -15,10 +16,16 @@ import { STRATEGIES } from "./strategies.js";
 // ne devient un nombre JavaScript qu'une fois ramené à un pour-mille.
 
 const MOINS = "−";
-const INSECABLE = "\u00a0";
+const INSECABLE = " ";
 
-// resultats : ce que rend `jouer`, plus `horsLigne` (voir mesurer.js).
-// entete : { version, build }.
+// L'écart hors ligne « change un peu » avec la durée de l'absence tant que,
+// d'une absence à l'autre, il ne bouge pas de plus de 10 pour-mille (un point
+// de pourcentage) ; au-delà, il « change ». C'est un choix d'écriture, pas
+// une cible.
+const VARIATION_FAIBLE_POUR_MILLE = 10;
+
+// resultats : ce que rend `jouer`, plus `options` et `horsLigne` (voir
+// mesurer.js). entete : { version, build }.
 export function rediger(resultats, entete) {
   const options = resultats.options;
   const lignes = [];
@@ -28,18 +35,29 @@ export function rediger(resultats, entete) {
   lignes.push(`Le joueur automatique joue une partie neuve. Stratégie : ${STRATEGIES[options.strategie].phrase}`);
   lignes.push("");
   lignes.push(
-    `Il décide une fois toutes les ${secondes(options.cadenceMs)} de jeu, et s'arrête à ` +
-      `${formater(new Decimal(options.jusqua))} J ou après ${formaterDuree(options.dureeMaxMs)} de jeu.`,
+    `Il décide une fois toutes les ${secondes(options.cadenceMs)} de jeu, et s'arrête ${conditionsDArret(options)}.`,
   );
   lignes.push("");
 
   lignes.push(...sectionReperes(resultats));
+  lignes.push(...sectionPaliers(resultats));
   lignes.push(...sectionDecades(resultats));
   lignes.push(...sectionPremiersAchats(resultats));
   lignes.push(...sectionHorsLigne(resultats));
-  lignes.push(...sectionPasEncore());
+  lignes.push(...sectionPasEncore(resultats));
 
   return lignes.join("\n");
+}
+
+// « au palier 6 (1,5 K) ou après 2 h 0 min de jeu ».
+function conditionsDArret(options) {
+  const conditions = [];
+  if (options.jusqua !== undefined) conditions.push(`à ${formater(new Decimal(options.jusqua))} J`);
+  if (options.jusquaPalier !== undefined) {
+    conditions.push(`au palier ${options.jusquaPalier} (${temperature(options.jusquaPalier)})`);
+  }
+  conditions.push(`après ${formaterDuree(options.dureeMaxMs)} de jeu`);
+  return ou(conditions);
 }
 
 // 1. Repères face au plan.
@@ -62,36 +80,83 @@ function sectionReperes(resultats) {
 }
 
 function ligneDeRepere(cible, resultats) {
-  if (cible.mesure === "palier1") {
-    // Le temps de la décade du seuil, jamais celui de l'arrêt de la partie :
-    // une partie arrêtée plus tôt (`jusqua` plus bas) ne dit rien du seuil.
-    const decade = resultats.decades.find((d) => d.exposant === cible.exposant);
-    if (decade === undefined) {
-      const verdict = resultats.arriveeMs === null ? "hors cible" : "non mesuré";
+  if (cible.mesure === "palier") {
+    // Un palier se lit au refroidissement, quand le joueur appuie.
+    const atteint = resultats.paliers.find((p) => p.palier === cible.palier);
+    if (atteint === undefined) {
+      // Trop lent, si la partie a joué toute sa durée bien au-delà de la
+      // cible ; sinon elle s'est arrêtée trop tôt pour en rien dire.
+      const tropLent = resultats.arret.cause === "duree"
+        && ecartPourMille(resultats.finMs, cible.cibleMs) > TOLERANCE_POUR_MILLE;
+      const verdict = tropLent ? "hors cible" : "non mesuré";
       return `| ${cible.repere} | non atteint en ${formaterDuree(resultats.finMs)} de jeu | ${cible.cible} | — | ${verdict} |`;
     }
-    const ms = decade.ms;
-    const pourMille = ecartPourMille(ms, cible.cibleMs);
+    const pourMille = ecartPourMille(atteint.ms, cible.cibleMs);
     const verdict = Math.abs(pourMille) <= TOLERANCE_POUR_MILLE ? "dans la cible" : "hors cible";
-    return `| ${cible.repere} | ${duree(ms)} | ${cible.cible} | ${formaterPourMilleSigne(pourMille)} % | ${verdict} |`;
+    return `| ${cible.repere} | ${duree(atteint.ms)} | ${cible.cible} | ${formaterPourMilleSigne(pourMille)} % | ${verdict} |`;
   }
-  if (cible.mesure === "ecartSansAchat") {
+  if (cible.mesure === "ecartEntreAchats") {
     const ecart = resultats.ecart;
     if (ecart === null) {
-      return `| ${cible.repere} | aucun (moins de deux achats) | ${cible.cible} | — | sous le plafond |`;
+      return `| ${cible.repere} | aucun (jamais deux achats dans un même palier) | ${cible.cible} | — | sous le plafond |`;
     }
     const verdict = ecart.ms <= cible.plafondMs ? "sous le plafond" : "au-dessus";
-    const mesure = `${duree(ecart.ms)}, de ${secondes(ecart.debutMs)} à ${secondes(ecart.finMs)}`;
+    const mesure = `${duree(ecart.ms)}, de ${secondes(ecart.debutMs)} à ${secondes(ecart.finMs)}, au palier ${ecart.palier}`;
     const pourMille = ecartPourMille(ecart.ms, cible.plafondMs);
     return `| ${cible.repere} | ${mesure} | ${cible.cible} | ${formaterPourMilleSigne(pourMille)} % | ${verdict} |`;
   }
   throw new RangeError(`rapport : mesure inconnue (${cible.mesure})`);
 }
 
-// 2. Les décades.
+// 2. Les paliers.
+function sectionPaliers(resultats) {
+  const lignes = [
+    "## 2. Les paliers",
+    "",
+    "Une ligne par palier joué. « Écart max » : le plus long écart entre deux achats dans le palier. " +
+      "« Attente du seuil » : du dernier achat du palier au refroidissement suivant ; le joueur ne peut " +
+      "plus rien acheter, il regarde la jauge monter.",
+    "",
+    "| Palier | Température | Atteint à | Durée du palier | Machines | Écart max entre deux achats | Attente du seuil |",
+    "|---|---|---|---|---|---|---|",
+  ];
+  for (const { palier, debutMs, finMs, ecart, attente } of resultats.releves) {
+    const quoi = `${temperature(palier)}, ${PALIERS[palier].technique.toLowerCase()}`;
+    const dureeDuPalier = finMs === null ? "—" : duree(finMs - debutMs);
+    const ecartMax = ecart === null
+      ? "—"
+      : `${secondes(ecart.ms)}, de ${secondes(ecart.debutMs)} à ${secondes(ecart.finMs)}`;
+    const attenteDuSeuil = attente === null ? "—" : secondes(attente.ms);
+    lignes.push(
+      `| ${palier} | ${quoi} | ${duree(debutMs)} | ${dureeDuPalier} | ${machinesDebloqueesAuPalier(palier)} | ` +
+        `${ecartMax} | ${attenteDuSeuil} |`,
+    );
+  }
+  lignes.push("");
+  const dernier = resultats.releves.at(-1);
+  if (dernier.finMs === null) {
+    lignes.push(
+      `La partie s'arrête au palier ${dernier.palier}, à ${duree(resultats.finMs)} : ` +
+        "ce palier n'a encore ni durée, ni attente.",
+    );
+    lignes.push("");
+  }
+  return lignes;
+}
+
+// 3. La montée du premier palier : les décades, jusqu'à son seuil.
 function sectionDecades(resultats) {
-  const lignes = ["## 2. Les décades", "", "Le temps de jeu pour atteindre chaque puissance de dix.", ""];
-  lignes.push("| Énergie | Atteinte à |", "|---|---|");
+  const seuil = new Decimal(PALIERS[1].seuil);
+  const depart = new Decimal(ENERGIE_APRES_PALIER);
+  const lignes = [
+    "## 3. La montée du premier palier",
+    "",
+    `Le temps de jeu pour atteindre chaque puissance de dix, jusqu'au seuil du palier 1 (${formater(seuil)} J). ` +
+      `Plus haut, l'énergie repart de ${formater(depart)} J à chaque palier : une décade n'y voudrait plus rien dire.`,
+    "",
+    "| Énergie | Atteinte à |",
+    "|---|---|",
+  ];
   for (const { exposant, ms } of resultats.decades) {
     lignes.push(`| 10${exposantEnChiffres(exposant)} J | ${duree(ms)} |`);
   }
@@ -99,33 +164,28 @@ function sectionDecades(resultats) {
   return lignes;
 }
 
-// 3. Les premiers achats.
+// 4. Les premiers achats.
 function sectionPremiersAchats(resultats) {
-  const etat = resultats.etatFinal;
   const lignes = [
-    "## 3. Les premiers achats",
+    "## 4. Les premiers achats",
     "",
-    "Quand chaque machine est achetée pour la première fois, et où elle en est à la fin.",
+    "Quand chaque machine est achetée pour la première fois.",
     "",
-    "| Machine | Premier achat | Achetées | Possédées à la fin |",
-    "|---|---|---|---|",
+    "| Machine | Premier achat |",
+    "|---|---|",
   ];
-  for (let n = 1; n <= machinesDebloquees(etat); n++) {
+  for (let n = 1; n <= machinesDebloquees(resultats.etatFinal); n++) {
     const ms = resultats.premiersAchats[n - 1];
-    const machine = etat.machines[n - 1];
-    const quand = ms === null ? "jamais" : duree(ms);
-    lignes.push(`| ${MACHINES[n - 1].nom} | ${quand} | ${formaterEntier(machine.achetees)} | ${formater(machine.quantite)} |`);
+    lignes.push(`| ${MACHINES[n - 1].nom} | ${ms === null ? "jamais" : duree(ms)} |`);
   }
-  lignes.push("");
-  lignes.push(`Énergie à la fin : ${formater(etat.energie)} J.`);
   lignes.push("");
   return lignes;
 }
 
-// 4. Le hors ligne.
+// 5. Le hors ligne.
 function sectionHorsLigne(resultats) {
   const lignes = [
-    "## 4. Le hors ligne",
+    "## 5. Le hors ligne",
     "",
     "Quand tu reviens, le jeu calcule en une fois ce que tes machines ont produit pendant ton absence. " +
       "On compare à ce qu'elles auraient produit si l'appli était restée ouverte sans toi. " +
@@ -144,7 +204,7 @@ function sectionHorsLigne(resultats) {
     }
     groupe.pourMilles.push(pourMille);
     const moment =
-      `${formater(mesure.seuil)} J, à ${secondes(mesure.ms)}, ` +
+      `${formater(mesure.seuil)} J, à ${secondes(mesure.ms)}, palier ${mesure.palier}, ` +
       `${mesure.machinesEnMarche} machine${mesure.machinesEnMarche > 1 ? "s" : ""} en marche`;
     lignes.push(
       `| ${moment} | ${formaterDuree(mesure.absenceMs)} | ${formater(mesure.gainRattrape)} J | ` +
@@ -162,15 +222,9 @@ function sectionHorsLigne(resultats) {
         : `${formaterPourMille(plusPetite)} à ${formaterPourMille(plusGrande)}`;
     lignes.push(`Quand tu reviens, le jeu te rend ${x} % de moins que s'il était resté ouvert.`);
     // Ce qui suit se lit dans les nombres ci-dessus, il ne s'écrit pas d'avance.
-    const stable = groupes.every((g) => g.pourMilles.every((p) => p === g.pourMilles[0]));
-    if (stable && groupes.length > 1) {
-      const machines = groupes.map((g) => g.machinesEnMarche);
-      lignes.push(
-        "L'écart ne change pas avec la durée de l'absence. Il grandit avec le nombre de machines en marche " +
-          `(${enumerer(machines)}).`,
-      );
-    } else if (!stable) {
-      lignes.push("L'écart change avec la durée de l'absence.");
+    if (groupes[0].pourMilles.length > 1) lignes.push(phraseDeLaDuree(groupes));
+    if (grandit(groupes)) {
+      lignes.push(`Il grandit avec le nombre de machines en marche (${enumerer(groupes.map((g) => g.machinesEnMarche))}).`);
     }
     lignes.push("Pas de verdict : la cible n'est pas encore chiffrée.");
   } else {
@@ -180,22 +234,60 @@ function sectionHorsLigne(resultats) {
   return lignes;
 }
 
-// 5. Pas encore mesurable.
-function sectionPasEncore() {
+// La durée de l'absence change-t-elle l'écart ? On prend, à chaque moment de
+// la partie, l'écart entre la plus petite et la plus grande perte d'une
+// absence à l'autre, en pour-mille arrondi comme dans le tableau : un écart
+// qui ne bouge qu'en deçà du pour-mille « ne change pas ».
+function phraseDeLaDuree(groupes) {
+  const variation = Math.max(...groupes.map((g) => Math.max(...g.pourMilles) - Math.min(...g.pourMilles)));
+  if (variation === 0) return "L'écart ne change pas avec la durée de l'absence.";
+  const points = `${formaterPourMille(variation)} point${variation >= 20 ? "s" : ""}`;
+  if (variation <= VARIATION_FAIBLE_POUR_MILLE) {
+    return `L'écart change un peu avec la durée de l'absence : ${points} au plus d'une absence à l'autre.`;
+  }
+  return `L'écart change avec la durée de l'absence : jusqu'à ${points} d'une absence à l'autre.`;
+}
+
+// L'écart grandit-il avec le nombre de machines en marche ? Oui si, d'un
+// moment de la partie au suivant, il y a plus de machines ET la perte est
+// plus grande, pour chaque durée d'absence.
+function grandit(groupes) {
+  if (groupes.length < 2) return false;
+  return groupes.every((g, i) => i === 0 || (
+    g.machinesEnMarche > groupes[i - 1].machinesEnMarche
+    && g.pourMilles.every((p, j) => p < groupes[i - 1].pourMilles[j])
+  ));
+}
+
+// 6. Pas encore mesurable.
+function sectionPasEncore(resultats) {
   const lignes = [
-    "## 5. Pas encore mesurable",
+    "## 6. Pas encore mesurable",
     "",
     "Ces repères du plan demandent une mécanique que le jeu n'a pas encore.",
     "",
     "| Repère | Cible | Source | Mesurable avec |",
     "|---|---|---|---|",
   ];
+  const notes = [];
   for (const cible of CIBLES) {
     if (cible.mesure !== null) continue;
     lignes.push(`| ${cible.repere} | ${cible.cible} | ${cible.source} | ${cible.lot} |`);
+    // Un palier atteint se lit au § 2, mais sa cible ne se juge pas encore.
+    const atteint = cible.palier === undefined ? undefined : resultats.paliers.find((p) => p.palier === cible.palier);
+    if (atteint !== undefined) {
+      notes.push(`${cible.repere} : ${duree(atteint.ms)} (§ 2), sans verdict : ${cible.pourquoi}.`);
+    }
   }
   lignes.push("");
+  if (notes.length > 0) lignes.push(...notes, "");
   return lignes;
+}
+
+// « 194,65 K » : `formater` garde jusqu'à trois décimales, sans zéros
+// inutiles (« 27,1 K »).
+function temperature(palier) {
+  return `${formater(new Decimal(PALIERS[palier].kelvins))} K`;
 }
 
 // « 3 min 42 s (222,75 s) ». Quand les deux écritures disent la même chose
@@ -216,6 +308,12 @@ function secondes(ms) {
 function enumerer(nombres) {
   if (nombres.length === 1) return String(nombres[0]);
   return `${nombres.slice(0, -1).join(", ")} puis ${nombres.at(-1)}`;
+}
+
+// ["a", "b", "c"] → « a, b ou c ».
+function ou(elements) {
+  if (elements.length === 1) return elements[0];
+  return `${elements.slice(0, -1).join(", ")} ou ${elements.at(-1)}`;
 }
 
 // 222750 → « 222,75 » ; 69000 → « 69 ». Des millisecondes entières, sans
