@@ -21,6 +21,7 @@ npm ci
 | `npm run build` | construit `dist/index.html`, le jeu en un seul fichier |
 | `npm test` | lance les tests |
 | `npm run voir` | vérifie le jeu sans écran dans Chromium, captures dans `captures/` |
+| `npm run mesure` | joueur automatique : joue la simulation sans écran et écrit les temps face aux cibles dans `mesures/MESURE.md` (hors de `check`) |
 
 `npm run voir` utilise Chromium par Playwright. Au premier lancement, il faut
 l'installer une fois :
