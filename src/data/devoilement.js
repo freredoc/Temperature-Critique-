@@ -1,4 +1,5 @@
 import { MACHINES } from "./machines.js";
+import { seuilSuivant } from "../sim/froid.js";
 import { machinesDebloquees } from "../sim/machines.js";
 
 // Ce qui s'affiche, et à quelle condition. src/ui/ecran.js ne montre
@@ -15,6 +16,14 @@ import { machinesDebloquees } from "../sim/machines.js";
 export const DEVOILEMENT = [
   { id: "energie", condition: () => true },
   { id: "production", condition: (etat) => etat.decouvertes.machines >= 1 },
+  // Le froid arrive avec la première Turbine (machine 3), et ne repart plus.
+  // Une condition sur l'énergie le ferait clignoter : elle redescend à chaque
+  // achat, et retombe à 10 J à chaque palier.
+  { id: "froid", condition: (etat) => etat.decouvertes.machines >= 3 || etat.decouvertes.paliers >= 1 },
+  { id: "froid-explication", condition: (etat) => etat.decouvertes.paliers >= 1 },
+  // La jauge, le bouton et l'aperçu, tant qu'il reste un palier à descendre
+  // (froid.palier < 6).
+  { id: "froid-suivant", condition: (etat) => seuilSuivant(etat) !== null },
   { id: "aide-debut", condition: (etat) => etat.decouvertes.machines === 0 },
   { id: "commandes-achat", condition: (etat) => etat.decouvertes.machines >= 2 },
   // Une entrée par machine, tirée de MACHINES : la machine n se montre quand

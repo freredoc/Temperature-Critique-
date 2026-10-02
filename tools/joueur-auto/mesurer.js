@@ -17,9 +17,18 @@ export function mesurer(options, entete) {
     if (instantane.ms === null) continue;
     // Les machines qui tournent à cet instant : celles qu'on possède.
     const machinesEnMarche = instantane.etat.machines.filter((m) => m.quantite.gt(0)).length;
+    const palier = instantane.etat.froid.palier;
     for (const absenceMs of options.absences ?? []) {
       const { gainRattrape, gainPasAPas } = mesurerHorsLigne(instantane.etat, absenceMs);
-      horsLigne.push({ seuil: instantane.seuil, ms: instantane.ms, machinesEnMarche, absenceMs, gainRattrape, gainPasAPas });
+      horsLigne.push({
+        seuil: instantane.seuil,
+        ms: instantane.ms,
+        palier,
+        machinesEnMarche,
+        absenceMs,
+        gainRattrape,
+        gainPasAPas,
+      });
     }
   }
   return rediger({ ...resultats, options, horsLigne }, entete);
