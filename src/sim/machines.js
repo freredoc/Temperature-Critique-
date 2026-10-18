@@ -1,4 +1,5 @@
 import { Decimal } from "./nombre.js";
+import { MULTIPLICATEUR_PALIER } from "../data/froid.js";
 import { MACHINES, MACHINES_AU_DEPART, MULTIPLICATEUR_LOT, TAILLE_LOT } from "../data/machines.js";
 
 // La cascade : prix, multiplicateurs, production et achats des machines.
@@ -9,16 +10,35 @@ import { MACHINES, MACHINES_AU_DEPART, MULTIPLICATEUR_LOT, TAILLE_LOT } from "..
 // AD n'en produit que le dixième (antimatter-dimension.js, ligne 664) ; ici
 // c'est un écart voulu, celui de la simulation du 23/09 qui a calé le plan.
 // Ne pas « corriger » vers AD.
+//
+// ⚠ LES IMPORTS VONT DANS UN SEUL SENS : src/sim/froid.js importe ce
+// fichier, jamais l'inverse. Ce fichier lit `etat.froid.palier` et
+// src/data/froid.js, et c'est tout ce qu'il sait du froid.
 
 // Les textes de MACHINES deviennent des Decimal ici, une fois.
 const COUTS = MACHINES.map((m) => new Decimal(m.cout));
 const FACTEURS = MACHINES.map((m) => new Decimal(m.facteur));
 const MULTIPLICATEUR = new Decimal(MULTIPLICATEUR_LOT);
+const MULTIPLICATEUR_FROID = new Decimal(MULTIPLICATEUR_PALIER);
 
-// Combien de machines s'achètent et produisent. Les paliers de froid en
-// ouvriront davantage.
+// Les deux règles du froid sur les machines, écrites ici et nulle part
+// ailleurs. Elles ne lisent qu'un numéro de palier : l'aperçu du palier
+// suivant (src/sim/froid.js) les appelle avec `palier + 1` au lieu de les
+// recopier.
+//
+// Une machine de plus par palier : 4, 5, 6, 7, 8, 8, 8 du palier 0 au 6.
+export function machinesDebloqueesAuPalier(p) {
+  return Math.min(MACHINES.length, MACHINES_AU_DEPART + p);
+}
+
+// Toutes les machines ×2 par palier, cumulatif : ×2^p au palier p.
+export function multiplicateurDePalier(p) {
+  return MULTIPLICATEUR_FROID.pow(p);
+}
+
+// Combien de machines s'achètent et produisent, au palier de la partie.
 export function machinesDebloquees(etat) {
-  return MACHINES_AU_DEPART;
+  return machinesDebloqueesAuPalier(etat.froid.palier);
 }
 
 // Les lots complets achetés : c'est `achetees`, jamais `quantite`, qui fixe
@@ -28,11 +48,11 @@ function lotsComplets(etat, n) {
   return Math.floor(machine(etat, n).achetees / TAILLE_LOT);
 }
 
-// Le multiplicateur de production de la machine n. Les multiplicateurs se
-// composent ici, et nulle part ailleurs : le lot FROID y ajoutera le ×2 par
-// palier.
+// Le multiplicateur de production de la machine n : ×2 par lot complet
+// acheté, puis ×2 par palier de froid. Les multiplicateurs se composent ici,
+// et nulle part ailleurs : le lot SUPRA y ajoutera le sien.
 export function multiplicateur(etat, n) {
-  return MULTIPLICATEUR.pow(lotsComplets(etat, n));
+  return MULTIPLICATEUR.pow(lotsComplets(etat, n)).times(multiplicateurDePalier(etat.froid.palier));
 }
 
 // Le prix de la prochaine unité de la machine n.

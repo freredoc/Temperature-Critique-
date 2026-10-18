@@ -5,6 +5,7 @@ import { rattraper } from "./sim/rattrapage.js";
 import { envelopper, relire, serialiser } from "./sim/sauvegarde.js";
 import { monterEcran } from "./ui/ecran.js";
 import { formaterDuree } from "./ui/format.js";
+import { monterFroid } from "./ui/froid.js";
 import { monterMachines } from "./ui/machines.js";
 import { monterModeTest } from "./ui/mode-test.js";
 import { monterOptions } from "./ui/options.js";
@@ -148,6 +149,7 @@ function rendre() {
   // Le dévoilement d'abord : les cartes cachées ne se calculent pas.
   ecran.rendre(jeu.etat);
   machines.rendre(jeu.etat);
+  froid.rendre(jeu.etat);
   if (options.ouvert()) {
     options.rafraichir();
     modeTest.rafraichir();
@@ -181,6 +183,9 @@ function reprendre() {
 // page : il exige un élément par entrée de DEVOILEMENT.
 const machines = monterMachines(jeu, { apresAchat: rendre });
 const ecran = monterEcran();
+// Refroidir est un geste du joueur, et seulement ici : ni `avancer`, ni le
+// rattrapage hors ligne ne descendent un palier.
+const froid = monterFroid(jeu, { apresRefroidir: rendre });
 jeu.etat = charger();
 if (document.visibilityState === "hidden") cacheLe = Date.now();
 sauvegarderAuto();

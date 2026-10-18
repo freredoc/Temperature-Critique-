@@ -48,8 +48,9 @@ les rapports sont dans `rapports/`.
   simulation pure sous Node et écrit `mesures/MESURE.md`, les temps face aux
   cibles du plan. Trois règles :
   - **il ne réimplémente aucune règle du jeu** : il appelle `etatInitial`,
-    `avancer`, `toutAcheter`, `rattraper`, `serialiser`/`deserialiser`, jamais
-    un prix ou une production à lui ;
+    `avancer`, `toutAcheter`, `refroidir`, `rattraper`,
+    `serialiser`/`deserialiser`, jamais un prix, une production ou un seuil à
+    lui ;
   - **il est déterministe** : ni horloge, ni hasard, aucun état gardé au
     niveau du module, ni date ni durée dans le rapport. Mêmes options, même
     texte au caractère près ;
@@ -87,6 +88,10 @@ les rapports sont dans `rapports/`.
   `temperature-critique:sauvegarde-v<N>:<heure>`) avant la première écriture ;
   si la copie échoue, rien n'est écrit. Une migration décrit la forme de SON
   époque en toutes lettres et ne lit jamais une table de `src/data/`.
+  **Aucun test n'écrit en dur un numéro de version qu'il n'a pas construit
+  lui-même** : il lit `SAVE_VERSION` (`SOCLE T1`, `MACHINES T1`, `FROID T1`,
+  l'étape M8 de `npm run voir`). Une enveloppe v1 ou v2 écrite en toutes
+  lettres par le test, elle, porte son numéro.
 - **Le dévoilement** passe par `src/data/devoilement.js`
   (`{ id, condition(etat) }` ↔ `[data-devoile="id"]`) : jamais de
   `if (lot >= n)` dans l'écran.
@@ -101,7 +106,30 @@ les rapports sont dans `rapports/`.
   (entier, les seuls achats) : **c'est `achetees` qui fixe le prix et le
   multiplicateur**, jamais `quantite`. `decouvertes.machines` (la plus haute
   machine jamais achetée) **ne descend jamais** et dévoile les cartes.
-  `machinesDebloquees` vaut 4 ; le lot FROID l'ouvrira.
+  `machinesDebloquees` vaut 4 plus le palier de froid, 8 au plus.
+- **Le froid** : six paliers, des données (`src/data/froid.js` : `PALIERS`,
+  seuils en texte, températures en `Number`) et une règle pure
+  (`src/sim/froid.js` : `seuilSuivant`, `peutRefroidir`, `refroidir`,
+  `apercuRefroidir`).
+  - **Les imports vont dans un seul sens : `froid.js` → `machines.js`**,
+    jamais l'inverse. `machines.js` lit `etat.froid.palier` et
+    `src/data/froid.js` ; les deux règles « au palier »
+    (`machinesDebloqueesAuPalier`, `multiplicateurDePalier`) n'existent que
+    là, et l'aperçu les appelle avec `palier + 1`. `multiplicateur` est le
+    seul endroit où les multiplicateurs se composent (lot, puis palier).
+  - **Refroidir est un geste du joueur, jamais dans `avancer`** : le
+    rattrapage hors ligne ne refroidit donc jamais, l'énergie s'accumule
+    au-delà du seuil. Seuls le bouton (`src/ui/froid.js`) et la stratégie
+    `froid` du joueur automatique appellent `refroidir`. Le Régulateur, qui
+    refroidira tout seul, arrive au lot SUPRA.
+  - `refroidir` remet l'énergie à 10 J et chaque machine à zéro, `achetees`
+    compris ; `decouvertes.machines` ne bouge pas, les cartes restent.
+  - **`decouvertes.paliers`**, le plus haut palier jamais atteint, **ne
+    descend jamais** : le lot SUPRA remettra `froid.palier` à 0 à chaque
+    quench, mais ce qui a été vu ne disparaît pas. `defautDeForme` exige
+    deux entiers de 0 à 6, et `decouvertes.paliers ≥ froid.palier`.
+  - Le bloc froid se dévoile avec la première Turbine (`decouvertes`, jamais
+    l'énergie, qui redescend), et `src/ui/froid.js` ne calcule aucune règle.
 - **Les cartes de machines** sont générées depuis `MACHINES` par
   `src/ui/machines.js` (aucune n'est écrite dans `index.html`), avant
   `monterEcran`, qui exige un élément par entrée de `DEVOILEMENT`. Elles ne
@@ -125,8 +153,8 @@ les rapports sont dans `rapports/`.
 | `npm run build` | `dist/index.html`, un seul fichier hors ligne ; échoue sur une ressource réseau, une 2ᵉ copie de break_infinity.js, une couleur hors palette |
 | `npm test` | les tests (`node --test "test/*.test.js"`) |
 | `npm run check` | garde-sim, puis les tests, puis le build : ce que lance la CI |
-| `npm run voir` | build, serveur local, scénario Playwright dans Chromium (360 × 780, DPR 3) : 22 étapes, captures dans `captures/` |
-| `npm run mesure` | joueur automatique : joue la partie de référence et écrit `mesures/MESURE.md` (versionné) ; **hors de `check`**, seuls ses deux tests y entrent |
+| `npm run voir` | build, serveur local, scénario Playwright dans Chromium (360 × 780, DPR 3) : 28 étapes, captures dans `captures/` |
+| `npm run mesure` | joueur automatique : joue la partie de référence (jusqu'au palier 6, une vingtaine de secondes) et écrit `mesures/MESURE.md` (versionné) ; **hors de `check`**, seuls ses deux tests y entrent |
 
 - Node ≥ 22 (la CI tourne en 22). Sur le PC d'Ethan, un Node 22 portable est
   en tête du PATH (`claudax/outils/node22`) ; le Node 24 de Program Files
@@ -141,11 +169,11 @@ les rapports sont dans `rapports/`.
 
 | | |
 |---|---|
-| Dernier lot | JOUEUR-AUTO (le jeu n'a pas changé d'un octet) |
-| Version · build | 0.2.0 · build 2 (inchangés) |
-| `SAVE_VERSION` | 2 (inchangé) |
-| Tests | 6 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage, MACHINES T1 sauvegarde v1 → v2, MACHINES T2 cascade, JOUEUR-AUTO T1 déterminisme, JOUEUR-AUTO T2 instrument du hors ligne) |
-| `dist/index.html` | 189 877 octets (inchangé, SHA-256 `9ff6d56a…4791`) |
-| Mesure | `mesures/MESURE.md` : 10⁹ J en 3 min 42 s (cible 3 min 43 s) ; écart hors ligne −0,1 à −0,6 % |
-| Rendu | vu dans Chromium (`npm run voir`, 22 étapes) ; pas encore sur le téléphone |
+| Dernier lot | FROID (six paliers, machines 5 à 8) |
+| Version · build | 0.3.0 · build 3 |
+| `SAVE_VERSION` | 3 (migration 2 → 3 : `froid.palier`, `decouvertes.paliers`) |
+| Tests | 8 (SOCLE T1 sauvegarde, SOCLE T2 rattrapage, MACHINES T1 sauvegarde v1 → courante, MACHINES T2 cascade, JOUEUR-AUTO T1 déterminisme, JOUEUR-AUTO T2 instrument du hors ligne, FROID T1 sauvegarde v2 → v3, FROID T2 règle du palier) |
+| `dist/index.html` | 199 382 octets (+9 505, SHA-256 `3bba9ff0…67d2`) |
+| Mesure | `mesures/MESURE.md` : paliers 1 à 5 en 3 min 42 s, 8 min 56 s, 14 min 38 s, 21 min 35 s et 29 min 1 s, tous dans la cible (−0,3 à −0,5 %) ; palier 6 en 37 min 34 s, sans verdict ; plus long écart entre deux achats d'un même palier 30,75 s (plafond 31 s) ; écart hors ligne −0,6 à −2,7 % |
+| Rendu | vu dans Chromium (`npm run voir`, 28 étapes) ; joué sur le téléphone d'Ethan depuis le 28/09 (lot MACHINES), le froid pas encore |
 | Jouer | https://freredoc.github.io/Temperature-Critique-/ |

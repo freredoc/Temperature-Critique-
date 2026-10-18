@@ -302,8 +302,8 @@ chiffres de la v1 et de la v2 restent valides.
 Huit machines en cascade : **la machine 1 produit de l'énergie, et la machine
 n produit la machine n − 1.**
 
-- Noms provisoires : Dynamo, Alternateur, Turbine, Centrale, Réseau, Réacteur,
-  Accélérateur, Collisionneur.
+- Noms (tranchés le 02/10) : Dynamo, Alternateur, Turbine, Centrale, Réseau,
+  Cyclotron, Synchrotron, Collisionneur.
 - Prix constant par lot de 10, puis ×facteur. Chaque lot complet **double** la
   production.
 - 4 machines au début d'un run, +1 par palier, 8 au maximum.
@@ -1044,9 +1044,8 @@ ne le saura vraiment qu'au point de décision**, et c'est pour ça qu'il existe.
 
 **Celui-ci se tranche avant le lot MACHINES (lot 2) :**
 
-5. **Les noms des 8 machines** (Dynamo, Alternateur, Turbine, Centrale, Réseau,
-   Réacteur, Accélérateur, Collisionneur, pour l'instant). « Réacteur » fait
-   doublon avec les réacteurs de la couche 2, donc il faut le renommer.
+5. ~~Les noms des 8 machines~~ : **tranchés le 02/10** : Dynamo, Alternateur,
+   Turbine, Centrale, Réseau, Cyclotron, Synchrotron, Collisionneur.
 
 **Ceux-ci se tranchent avant la fin de la tranche 1 :**
 
